@@ -16,6 +16,7 @@ PRECISION = "results/reproduction/precision"
 APPLICATION = "results/reproduction/checks"
 SIMULATION_RESULTS = "results/reproduction/simulation"
 APPLICATION_RESULTS = "results/reproduction/application"
+REPORTED_ASSETS = "manuscript/reproduced"
 CASES = (
     "application_high_first",
     "application_low_first",
@@ -52,8 +53,13 @@ def selected_paths() -> tuple[str, ...]:
         for name in (
             "case_summary.csv",
             "curve_summary.csv",
+            "residual_summary.csv",
+            "participant_contrasts.csv",
+            "participant_level_summary.csv",
+            "lag1_summary.csv",
             "ppc_check_summary.csv",
             "ppc_draws.csv",
+            "application_report.md",
             "run_manifest.json",
         )
     ]
@@ -61,8 +67,35 @@ def selected_paths() -> tuple[str, ...]:
         "scripts/config/application_protocol.md",
         "scripts/config/original_precision_protocol.json",
         "scripts/config/reproduction_sources.json",
-        f"{SIMULATION_RESULTS}/resolved_config.json",
-        f"{APPLICATION_RESULTS}/results.json",
+        *(
+            f"{SIMULATION_RESULTS}/{name}"
+            for name in (
+                "per_method.csv",
+                "a3_diagnostics.csv",
+                "summary.csv",
+                "resolved_config.json",
+                "geometry_manifest.json",
+                "run_manifest.json",
+                "run_status.json",
+            )
+        ),
+        *(
+            f"{APPLICATION_RESULTS}/{name}"
+            for name in ("results.json", "heldout_rmse.csv", "run_manifest.json")
+        ),
+        *(
+            f"{REPORTED_ASSETS}/tables/{name}"
+            for name in (
+                "table1_design.csv",
+                "table2_rmse.csv",
+                "table3_structural_recovery.csv",
+                "table4_computation_sensitivity.csv",
+                "table5_real_data.csv",
+                "publication_manifest.json",
+            )
+        ),
+        f"{REPORTED_ASSETS}/figures/fig2_dgp_trajectories.csv",
+        f"{REPORTED_ASSETS}/figures/fig3_structural_recovery.csv",
         "scripts/config/r61_formal.yaml",
         "scripts/config/r61_congruency_geometry.csv",
         "pyproject.toml",
@@ -149,7 +182,7 @@ def index_text(records: list[dict]) -> str:
     lines = [
         "# Supporting data",
         "",
-        "This package copies saved evidence and source bytes without rerunning analyses. "
+        "This package copies saved evidence, reported source data, and source bytes without rerunning analyses. "
         "PACKAGE_MANIFEST.json records each path, SHA-256, byte count and CSV schema. "
         "Raw participant trials, retained chains and binaries are not included.",
         "",
@@ -170,7 +203,12 @@ def index_text(records: list[dict]) -> str:
         "estimable, constant and unobserved indicators; blank cells are not perfect mixing. "
         "Conditional segment intervals refer to the empirical modal partition, not BMA intervals.",
         f"- `{APPLICATION}/`: 12 fixed sensitivity fits, trajectory summaries and "
-        "posterior-predictive discrepancy records for the two condition-order groups.",
+        "posterior-predictive discrepancy records for the two condition-order groups. "
+       "Participant-level phase changes resample complete participants rather than response rows.",
+        f"- `{SIMULATION_RESULTS}/per_method.csv`: all replication-level method metrics "
+        "used for distributional and Monte Carlo summaries.",
+        f"- `{REPORTED_ASSETS}/`: source values for the reported tables and for the "
+        "trajectory and structural-recovery figure geometries.",
         "- PPC observed discrepancies depend on each posterior draw; observed_median "
         "summarizes those discrepancies, not a fixed plug-in residual statistic. "
         "participant_contrast_sd uses participant-by-phase cells. Lag pairs stay within "
@@ -182,10 +220,12 @@ def index_text(records: list[dict]) -> str:
         "## Verification and reproduction",
         "",
         "From the extracted package root: `python scripts/package.py --verify .`.",
-        "Full numerical reproduction requires the public code checkout, all upstream "
-        "simulation/application records and authorized RawData_Experiment1 files from "
+        "Full numerical reproduction requires the public code checkout and the "
+        "RawData_Experiment1 files from "
         "https://osf.io/6n597/. Run `python scripts/reproduce.py all` in that checkout. "
-        "This curated package alone is not the complete reproduction input.",
+        "Retained Markov-chain arrays and simulated response matrices are not needed to "
+        "inspect the reported source values, but rerunning the stochastic analyses "
+        "regenerates them from the supplied configurations and deterministic seed rules.",
         "The archival protocols remain historical records, not new preregistration. "
         "Use the package manifest for the copied inventory and the current release "
         "source lock for reruns. Older analysis manifests may name unbundled paths.",
@@ -326,7 +366,8 @@ def verify(output: Path) -> dict:
 
 
 def main() -> None:
-    global PRECISION, APPLICATION, SIMULATION_RESULTS, APPLICATION_RESULTS, POINTWISE
+    global PRECISION, APPLICATION, SIMULATION_RESULTS, APPLICATION_RESULTS
+    global REPORTED_ASSETS, POINTWISE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--output-dir", type=Path)
@@ -336,6 +377,7 @@ def main() -> None:
     parser.add_argument("--application-checks", type=Path)
     parser.add_argument("--simulation-results", type=Path)
     parser.add_argument("--application-results", type=Path)
+    parser.add_argument("--reported-assets", type=Path)
     args = parser.parse_args()
     # Public reruns can use fresh result directories without touching the paper's
     # frozen records. Keeping relative paths makes the package independently inspectable.
@@ -344,6 +386,7 @@ def main() -> None:
         (args.application_checks, "APPLICATION"),
         (args.simulation_results, "SIMULATION_RESULTS"),
         (args.application_results, "APPLICATION_RESULTS"),
+        (args.reported_assets, "REPORTED_ASSETS"),
     ):
         if argument is not None:
             globals()[variable] = (

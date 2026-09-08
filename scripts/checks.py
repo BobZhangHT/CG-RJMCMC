@@ -530,6 +530,7 @@ def fit_case(
     base_summary["acceptance"] = acceptance
     curve = np.asarray(base_summary["bma_curve"], dtype=float)
     joint_state = list(base_summary["joint_map"])
+    participant_level = participant_level_change_summary(all_contrast_rows)
     result = {
         "case": spec,
         "nuisance_columns": nuisance_names,
@@ -771,6 +772,117 @@ def participant_contrast_rows(
     return rows
 
 
+def participant_level_change_summary(
+    rows: list[dict[str, Any]], bootstrap_replicates: int = 50_000
+) -> dict[str, Any]:
+    """Summarize phase changes with participants as the resampling units.
+
+    Each participant contributes one adjusted incongruent-minus-congruent
+    contrast before and after the experimental reversal.  The group summaries
+    give equal weight to participants, and the order-by-phase contrast is the
+    low-first mean change minus the high-first mean change.  Percentile
+    intervals resample complete participants within randomized-order groups.
+    """
+    frame = pd.DataFrame(rows)
+    wide = frame.pivot(
+        index=["group", "participant"],
+        columns="phase",
+        values="adjusted_participant_contrast",
+    )
+    if not {"before", "after"}.issubset(wide.columns) or wide.isna().any().any():
+        raise ValueError("each participant must have before and after contrasts")
+    wide["change"] = wide["after"] - wide["before"]
+
+    def seed_for(label: str) -> int:
+        digest = hashlib.sha256(
+            f"CG-RJMCMC-participant-bootstrap-v1|{label}".encode()
+        ).digest()
+        return int.from_bytes(digest[:8], "little")
+
+    def resampled_means(values: np.ndarray, label: str) -> tuple[int, np.ndarray]:
+        seed = seed_for(label)
+        rng = np.random.default_rng(seed)
+        means = np.empty(bootstrap_replicates, dtype=float)
+        chunk = 5_000
+        for start in range(0, bootstrap_replicates, chunk):
+            stop = min(start + chunk, bootstrap_replicates)
+            draws = rng.integers(0, len(values), size=(stop - start, len(values)))
+            means[start:stop] = values[draws].mean(axis=1)
+        return seed, means
+
+    changes = {
+        group: part["change"].to_numpy(dtype=float)
+        for group, part in wide.groupby(level="group", sort=True)
+    }
+    expected = {"High-first", "Low-first"}
+    if set(changes) != expected:
+        raise ValueError(f"unexpected order groups: {sorted(changes)}")
+
+    summary_rows: list[dict[str, Any]] = []
+    for group in ("High-first", "Low-first"):
+        values = changes[group]
+        seed, means = resampled_means(values, group)
+        q025, q975 = np.quantile(means, [0.025, 0.975])
+        summary_rows.append(
+            {
+                "contrast": "after_minus_before",
+                "group_1": group,
+                "group_2": "",
+                "n_1": len(values),
+                "n_2": 0,
+                "estimate": float(values.mean()),
+                "participant_sd": float(values.std(ddof=1)),
+                "bootstrap_q025": float(q025),
+                "bootstrap_q975": float(q975),
+                "bootstrap_replicates": bootstrap_replicates,
+                "seed": seed,
+            }
+        )
+
+    interaction_seed = seed_for("interaction")
+    interaction_rng = np.random.default_rng(interaction_seed)
+    interaction = np.empty(bootstrap_replicates, dtype=float)
+    low_values, high_values = changes["Low-first"], changes["High-first"]
+    for start in range(0, bootstrap_replicates, 5_000):
+        stop = min(start + 5_000, bootstrap_replicates)
+        low_draws = interaction_rng.integers(
+            0, len(low_values), size=(stop - start, len(low_values))
+        )
+        high_draws = interaction_rng.integers(
+            0, len(high_values), size=(stop - start, len(high_values))
+        )
+        interaction[start:stop] = low_values[low_draws].mean(axis=1) - high_values[
+            high_draws
+        ].mean(axis=1)
+    q025, q975 = np.quantile(interaction, [0.025, 0.975])
+    summary_rows.append(
+        {
+            "contrast": "order_by_phase_low_minus_high",
+            "group_1": "Low-first",
+            "group_2": "High-first",
+            "n_1": len(changes["Low-first"]),
+            "n_2": len(changes["High-first"]),
+            "estimate": float(
+                changes["Low-first"].mean() - changes["High-first"].mean()
+            ),
+            "participant_sd": "",
+            "bootstrap_q025": float(q025),
+            "bootstrap_q975": float(q975),
+            "bootstrap_replicates": bootstrap_replicates,
+            "seed": interaction_seed,
+        }
+    )
+    return {
+        "estimand": (
+            "equal-participant mean of adjusted training-response contrasts; "
+            "interaction is low-first minus high-first change"
+        ),
+        "resampling_unit": "participant within randomized-order group",
+        "interval": "deterministic nonparametric percentile bootstrap",
+        "rows": summary_rows,
+    }
+
+
 def lag_summary_rows(
     train: pd.DataFrame, residual: np.ndarray, group: str
 ) -> list[dict[str, Any]]:
@@ -943,13 +1055,33 @@ def report_text(result: dict[str, Any]) -> str:
             + ". These are posterior-predictive diagnostics, not calibrated frequentist tests."
         )
         lines.append("")
+    participant = result.get("participant_level_analysis")
+    if participant:
+        lines.extend(
+            [
+                "## Participant-level phase changes",
+                "",
+                "Adjusted before/after contrasts were paired within each participant. "
+                "Intervals used 50,000 deterministic nonparametric bootstrap resamples "
+                "of complete participants within randomized-order groups.",
+                "",
+            ]
+        )
+        for row in participant["rows"]:
+            lines.append(
+                f"{row['contrast']} ({row['group_1']}"
+                + (f" minus {row['group_2']}" if row["group_2"] else "")
+                + f"): {row['estimate']:.6f} "
+                f"[{row['bootstrap_q025']:.6f}, {row['bootstrap_q975']:.6f}]."
+            )
+        lines.append("")
     lines.extend(
         [
             "## Interpretation boundary",
             "",
             "Agreement across these fixed cases supports only bounded robustness to the checked common block effects and variance ratios. It does not show that all residual dependence, tail behavior, nonlinear time trends, or participant heterogeneity has been repaired. Any PPC flags above are retained as model mismatch evidence.",
             "",
-            "Raw tables: `case_summary.csv`, `curve_summary.csv`, `residual_summary.csv`, `participant_contrasts.csv`, `lag1_summary.csv`, `ppc_check_summary.csv`, and `ppc_draws.csv`.",
+            "Raw tables: `case_summary.csv`, `curve_summary.csv`, `residual_summary.csv`, `participant_contrasts.csv`, `participant_level_summary.csv`, `lag1_summary.csv`, `ppc_check_summary.csv`, and `ppc_draws.csv`.",
             "",
         ]
     )
@@ -973,6 +1105,18 @@ def supplement_tex(result: dict[str, Any]) -> str:
     high_block = high["cases"][1]
     high_pip32_min = min(x["PIP32"] for x in high["cases"])
     low_pip32_min = min(x["PIP32"] for x in low["cases"])
+    participant_rows = result["participant_level_analysis"]["rows"]
+    participant_body = "\n".join(
+        (
+            f"{row['group_1']}"
+            + (f" minus {row['group_2']}" if row["group_2"] else "")
+            + f" & {int(row['n_1'])}"
+            + (f" + {int(row['n_2'])}" if int(row["n_2"]) else "")
+            + f" & {float(row['estimate']):.3f} "
+            f"[{float(row['bootstrap_q025']):.3f}, {float(row['bootstrap_q975']):.3f}] \\\\"
+        )
+        for row in participant_rows
+    )
     header = r"""\section{Prespecified real-application model checks}\label{sec:application-checks}
  The nominal joint-partition analysis with factorial count prior $p(K)\propto 1/K!$ remains primary. We used the unchanged sampler for five bounded, fixed-prior sensitivities: ten common retained-block effects with precision 4; participant-intercept variance ratios 0.25 and 4; and mean-zero participant congruency-slope variance ratios 0.01 and 0.1. These alternatives were specified before inspecting their results and were not selected as replacements.
 
@@ -999,6 +1143,21 @@ Order & Model & PIP(12) & PIP(32) & Phase change (95\% CrI) & RMSE \\
 \end{tabular}
 \end{table}
 
+As a participant-level robustness analysis, we computed one adjusted congruency contrast for each participant in each retained phase from the training responses. The adjustment subtracts the nominal fitted nuisance contribution and adds back the nominal phase-average population contrast. We then formed the within-participant after-minus-before difference. Group means give equal weight to participants, rather than to response rows, and percentile intervals use 50,000 deterministic nonparametric bootstrap samples of complete participants within randomized-order groups. The direct order-by-phase contrast is the low-first mean change minus the high-first mean change.
+
+\begin{table}[htbp]
+\centering
+\caption{Participant-level robustness analysis of the phase change. Estimates are after-minus-before changes in the adjusted log-RT congruency contrast. The final row is the direct order-by-phase contrast. Intervals are 95\% participant-bootstrap percentile intervals. They assess variation across participants and do not recalibrate posterior boundary probabilities or the nominal model's segment intervals.}
+\label{tab:participant-phase-change}
+\begin{tabular}{lcc}
+\toprule
+Contrast & Participants & Estimate (95\% interval) \\
+\midrule
+@PARTICIPANT_ROWS@
+\bottomrule
+\end{tabular}
+\end{table}
+
 Posterior predictive checks used the training observations and 1000 joint posterior draws per group. At draw $s$, the observed residual vector was $\bm e^{(s)}=\bm y-\bm\mu^{(s)}$, where $\bm\mu^{(s)}$ is the fitted observation-level mean from that draw's partition and jointly sampled coefficients. Replicated responses used the same design, participants, fitted mean, and residual scale $\sigma^{(s)}$; their residuals were independent $N(0,\{\sigma^{(s)}\}^2)$ draws. Thus observed discrepancies also varied across posterior draws.
 
 Location and dispersion were the overall residual mean and sample SD divided by $\sigma^{(s)}$. Tail rates were the proportions below $-2\sigma^{(s)}$ and above $2\sigma^{(s)}$. Participant and phase-by-congruency checks used the maximum absolute residual cell mean, divided by $\sigma^{(s)}$. Contrast dispersion was the sample SD of residual incongruent-minus-congruent mean differences across participant-by-phase cells, also divided by $\sigma^{(s)}$; cells missing either condition were omitted. The phase indicator separated bins 1--32 and 33--64. Lag checks pooled residual pairs within participants and retained blocks and calculated Pearson correlations. One used consecutive analyzed training records, whose native distances may exceed one; the other restricted those pairs to native distance one. No pair crossed a block or the omitted practice interval.
@@ -1007,21 +1166,21 @@ For each discrepancy, let $p$ be the proportion of replicated values at least as
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=.95\linewidth]{reproduced/application_sensitivity.pdf}
+\includegraphics[width=.95\linewidth]{revision_assets/application_sensitivity.pdf}
 \caption{Posterior mean congruency-effect curves for the nominal analysis and five prespecified sensitivities. The nominal curve is a thick solid line and the common-block-effects curve a thick dashed line. RI denotes participant random intercept; RI and slope ratios express prior variance relative to residual variance. Vertical reference lines mark the boundaries after bins 12 and 32, the latter separating the retained experimental phases.}
 \label{fig:application-sensitivity}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=.95\linewidth]{reproduced/application_ppc.pdf}
+\includegraphics[width=.95\linewidth]{revision_assets/application_ppc.pdf}
 \caption{Nominal posterior predictive checks on training observations. Residual means, residual SD, maximum absolute participant and phase/condition means, and participant-by-phase residual-contrast dispersion are standardized by the posterior draw of $\sigma$; tail rates use thresholds $\pm2\sigma$, and lag statistics are correlations. Crosses denote median observed discrepancies over posterior draws. Blue points and intervals are the median and 95\% posterior-predictive range of replicated discrepancies, not credible intervals for model effects.}
 \label{fig:application-ppc}
 \end{figure}
 
 The nominal posterior predictive checks retained discrepancies in both groups for lower and upper tail rates, participant-by-phase residual-contrast dispersion, analyzed-order lag-1 dependence, and strict native-distance-one lag-1 dependence. Thus the sensitivity results do not repair all observed tail, individual-heterogeneity, or serial-dependence mismatch. These checks provide bounded evidence rather than a universal correction for misspecification; agreement among fixed prior ratios cannot establish robustness to every possible residual or random-effects structure.
 """
-    return header + body + footer
+    return header + body + footer.replace("@PARTICIPANT_ROWS@", participant_body)
 
 
 def flatten_case_rows(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1183,6 +1342,7 @@ def run(
         "protocol": str(APPLICATION_PROTOCOL.relative_to(ROOT)),
         "primary_model": "nominal alpha=1 joint partition",
         "sensitivity_status": "bounded prespecified checks; not candidate selection",
+        "participant_level_analysis": participant_level,
         "groups": groups,
         "source_hashes": {
             "runner": formal.sha256_file(Path(__file__)),
@@ -1228,6 +1388,11 @@ def run(
         output / "participant_contrasts.csv",
         list(all_contrast_rows[0]),
         all_contrast_rows,
+    )
+    formal.atomic_csv(
+        output / "participant_level_summary.csv",
+        list(participant_level["rows"][0]),
+        participant_level["rows"],
     )
     formal.atomic_csv(output / "lag1_summary.csv", list(all_lag_rows[0]), all_lag_rows)
     ppc_check_rows = [row for group in groups for row in group["ppc"]["checks"]]
@@ -1288,6 +1453,13 @@ def refresh_presentation(output: Path, assets: Path) -> dict[str, Any]:
     source = output / "application_results.json"
     source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     result = json.loads(source.read_text(encoding="utf-8"))
+    if "participant_level_analysis" not in result:
+        contrast_rows = pd.read_csv(output / "participant_contrasts.csv").to_dict(
+            orient="records"
+        )
+        result["participant_level_analysis"] = participant_level_change_summary(
+            contrast_rows
+        )
     _atomic_text(assets / "application_model_checks.tex", supplement_tex(result))
     plot_sensitivity(
         result["groups"],

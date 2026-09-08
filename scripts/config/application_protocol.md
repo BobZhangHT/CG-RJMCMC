@@ -39,6 +39,14 @@ and then draw all segment effects and nuisance coefficients jointly from `N(Lamb
 
 Paired observed/replicated checks cover residual location, dispersion and two-sided tails; phase-by-congruency residual location; maximum participant residual mean; participant congruency-contrast heterogeneity; and within-block native-order lag-1 dependence. Descriptive posterior-predictive folded-discrepancy tail areas and central predictive intervals are reported; these are diagnostics rather than calibrated frequentist tests. A small tail area is retained as evidence of mismatch, not optimized away.
 
+## Post-review participant-level analysis
+
+This analysis was added after editorial review and is not part of the frozen sensitivity protocol above. For each participant and phase, the code subtracts the nominal posterior-mean nuisance contribution from each training response, calculates the residual incongruent-minus-congruent mean difference, and adds the nominal phase-average effect. Each participant therefore contributes one adjusted contrast before and after the reversal. Their paired after-minus-before difference is the participant-level outcome.
+
+Group estimates weight participants equally. The direct order-by-phase contrast is the low-first mean change minus the high-first mean change. Percentile intervals use 50,000 deterministic nonparametric bootstrap samples of complete participants within each randomized-order group; response rows are never resampled as independent units. The analysis supports or challenges the group-level direction of the phase change. It does not recalibrate posterior boundary probabilities or the nominal model's conditional segment intervals. Results are written to `participant_level_summary.csv`, with participant-phase inputs retained in `participant_contrasts.csv`.
+
+The analytic Student-\(t\) intervals reported for the selected application partitions are produced by the separate precision check. The application stage retains empirical sampled endpoints, while `application_conditional_interval_check.csv` records the analytic values in fields beginning with `exact_` and the sampled values in fields beginning with `empirical_`.
+
 ## Stop and interpretation rules
 
 Stop before scientific interpretation if preprocessing/input hashes or frozen sampler settings drift, nominal `H/h/r` fail to reproduce the original implementation, a required precision system is not positive definite/finite, posterior covariance tests fail, or an output would be overwritten. Failed convergence diagnostics remain visible and prevent a robustness claim but do not authorize silent reruns or tuning. Predictive mismatch or a changed bin-12/bin-32 conclusion is reported honestly. Agreement among these fixed-prior cases does not establish that every possible real-data misspecification has been repaired.

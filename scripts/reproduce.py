@@ -94,6 +94,8 @@ def plan(args: argparse.Namespace) -> list[list[str]]:
                 sim,
                 "--application-results",
                 app,
+                "--reported-assets",
+                assets,
             )
         ],
     }

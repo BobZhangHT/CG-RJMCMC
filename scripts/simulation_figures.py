@@ -240,7 +240,13 @@ def fmt_iqr(values: Iterable[Any], digits: int = 3) -> tuple[str, int]:
     )
 
 
+class TexCell(str):
+    """A table cell containing deliberately authored LaTeX markup."""
+
+
 def latex_escape(value: Any) -> str:
+    if isinstance(value, TexCell):
+        return str(value)
     text = str(value)
     for old, new in (
         ("\\", r"\textbackslash{}"),
@@ -275,6 +281,7 @@ def write_latex_table(
     align: str,
     provisional: bool,
     notes: str = "",
+    add_space_after: set[int] | None = None,
 ) -> None:
     status = (
         "% PROVISIONAL: generated from incomplete inputs\n"
@@ -294,7 +301,10 @@ def write_latex_table(
         r"\midrule",
     ]
     if rows:
-        lines.extend(" & ".join(latex_escape(x) for x in row) + r" \\" for row in rows)
+        for row_i, row in enumerate(rows):
+            lines.append(" & ".join(latex_escape(x) for x in row) + r" \\")
+            if add_space_after and row_i in add_space_after:
+                lines.append(r"\addlinespace")
     else:
         lines.append(
             r"\multicolumn{" + str(len(headers)) + r"}{c}{Input incomplete} \\"
@@ -318,6 +328,7 @@ def figure2(
 ) -> None:
     cfg = config["config"]
     trials = int(cfg["design"]["trials"])
+    source_rows = []
     fig, axes = plt.subplots(2, 3, figsize=(7.15, 4.15), sharex=True, sharey=True)
     for i, (dgp, ax) in enumerate(zip(DGPS, axes.flat)):
         arrays = []
@@ -339,16 +350,31 @@ def figure2(
                 cfg["dgps"][dgp]["cuts"], cfg["dgps"][dgp]["levels"], trials
             )
             x = np.arange(1, trials + 1)
+            q25 = np.quantile(estimates, 0.25, axis=0)
+            median = np.median(estimates, axis=0)
+            q75 = np.quantile(estimates, 0.75, axis=0)
+            source_rows.extend(
+                {
+                    "dgp": dgp,
+                    "trial": int(trial),
+                    "replications": len(estimates),
+                    "truth": float(true),
+                    "estimate_q25": float(lo),
+                    "estimate_median": float(mid),
+                    "estimate_q75": float(hi),
+                }
+                for trial, true, lo, mid, hi in zip(x, truth, q25, median, q75)
+            )
             ax.fill_between(
                 x,
-                np.quantile(estimates, 0.25, axis=0),
-                np.quantile(estimates, 0.75, axis=0),
+                q25,
+                q75,
                 color=BLUE,
                 alpha=0.22,
                 linewidth=0,
             )
             ax.plot(
-                x, np.median(estimates, axis=0), color=BLUE, label="CG-RJMCMC median"
+                x, median, color=BLUE, label="CG-RJMCMC median"
             )
             ax.plot(x, truth, color=ORANGE, linestyle="--", label="Truth")
             ax.axhline(0, color="#BBBBBB", linewidth=0.55, zorder=0)
@@ -381,6 +407,9 @@ def figure2(
     )
     mark_provisional(fig, provisional)
     save_pdf(fig, out)
+    pd.DataFrame(source_rows).to_csv(
+        out.with_suffix(".csv"), index=False, lineterminator="\n"
+    )
 
 
 def figure3(
@@ -392,6 +421,7 @@ def figure3(
 ) -> None:
     frame = pd.DataFrame(records)
     cfg = config["config"]
+    source_rows = []
     # Model-dimension uncertainty and boundary selection are the two quantities
     # that are not already reported numerically in the structural-recovery table.
     # Hausdorff summaries remain in Table 3 to avoid repeating the same result
@@ -415,7 +445,19 @@ def figure3(
                 pass
         if pks:
             pkf = pd.concat(pks, axis=1).fillna(0)
-            ax_pk.bar(pkf.index.astype(int), pkf.mean(axis=1), color=BLUE, width=0.75)
+            mean_pk = pkf.mean(axis=1)
+            ax_pk.bar(pkf.index.astype(int), mean_pk, color=BLUE, width=0.75)
+            source_rows.extend(
+                {
+                    "dgp": dgp,
+                    "metric": "mean_posterior_count_probability",
+                    "index": int(k),
+                    "value": float(value),
+                    "replications": len(pks),
+                    "true_boundary": False,
+                }
+                for k, value in mean_pk.items()
+            )
             ax_pk.set_ylim(0, 1)
             ax_pk.set_xticks(pkf.index.astype(int))
         else:
@@ -435,15 +477,37 @@ def figure3(
                     if str(cut).strip():
                         freq[int(cut)] += 1
             denom = max(len(subset), 1)
+            xx = np.arange(1, len(mean_pip) + 1)
+            pelt_frequency = np.asarray([freq[int(v)] / denom for v in xx])
             if freq:
-                xx = np.arange(1, len(mean_pip) + 1)
-                pelt_frequency = np.asarray([freq[int(v)] / denom for v in xx])
                 ax_pip.plot(
                     xx,
                     pelt_frequency,
                     color=ORANGE,
                     linestyle="--",
                     label="PELT frequency",
+                )
+            truth = set(cfg["dgps"][dgp]["cuts"])
+            for trial, pip, pelt in zip(xx, mean_pip, pelt_frequency):
+                source_rows.extend(
+                    [
+                        {
+                            "dgp": dgp,
+                            "metric": "mean_boundary_inclusion_probability",
+                            "index": int(trial),
+                            "value": float(pip),
+                            "replications": len(pips),
+                            "true_boundary": int(trial) in truth,
+                        },
+                        {
+                            "dgp": dgp,
+                            "metric": "pelt_selection_frequency",
+                            "index": int(trial),
+                            "value": float(pelt),
+                            "replications": len(subset),
+                            "true_boundary": int(trial) in truth,
+                        },
+                    ]
                 )
             for cut in cfg["dgps"][dgp]["cuts"]:
                 ax_pip.axvline(cut, color=GREY, linestyle=":", linewidth=1.0, alpha=0.7)
@@ -488,6 +552,9 @@ def figure3(
     )
     mark_provisional(fig, provisional)
     save_pdf(fig, out)
+    pd.DataFrame(source_rows).to_csv(
+        out.with_suffix(".csv"), index=False, lineterminator="\n"
+    )
 
 
 def col(frame: pd.DataFrame, *names: str) -> str | None:
@@ -519,7 +586,11 @@ def table1(config: dict[str, Any], out_dir: Path, provisional: bool) -> None:
     write_csv(out_dir / "table1_design.csv", rows, provisional)
     latex_rows = [
         [
-            r[k]
+            (
+                TexCell(str(r[k]).replace(";", r";\,"))
+                if k in {"true_cuts", "true_levels"}
+                else r[k]
+            )
             for k in (
                 "DGP",
                 "participants",
@@ -614,7 +685,7 @@ def table2(records: list[dict[str, Any]], out_dir: Path, provisional: bool) -> N
         r"\small",
         r"\caption{Trajectory estimation and held-out prediction error.}",
         r"\label{tab:r61-rmse}",
-        r"\setlength{\tabcolsep}{4pt}",
+        r"\setlength{\tabcolsep}{6pt}",
         r"\renewcommand{\arraystretch}{1.04}",
         r"\begin{tabular}{lrrrrr}",
         r"\toprule",
@@ -636,6 +707,7 @@ def table2(records: list[dict[str, Any]], out_dir: Path, provisional: bool) -> N
         )
         if panel_title.startswith("Panel A"):
             lines.append(r"\midrule")
+            lines.append(r"\addlinespace")
     lines.extend(
         [
             r"\bottomrule",
@@ -694,6 +766,7 @@ def table3(records: list[dict[str, Any]], out_dir: Path, provisional: bool) -> N
         "llrrrrr",
         provisional,
         "Hausdorff and segment-level RMSE are median [IQR]. Level RMSE is conditional on recovering the correct number of segments; $n_K$ is its denominator.",
+        add_space_after=set(range(1, len(latex_rows) - 1, 2)),
     )
 
 
