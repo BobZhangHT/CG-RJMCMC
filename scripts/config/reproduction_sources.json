@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "purpose": "Current public release source-integrity lock for reproducibility reruns; not a preregistration record.",
+  "source_sha256": {
+    "scripts/precision.py": "2ce574c8505ebbf0fb9a22dd257a038db1a9381b6ff90912aeca6f50cb37837b",
+    "scripts/checks.py": "de0b1710a4a1bc1169da520498f19e368f56283d95394eaf4a352f5057dcde11",
+    "scripts/simulation.py": "d978dfc1e2128c4b422947bc6d614867c99bb9203e726bf0ea3625fa2157d848",
+    "scripts/kernel.c": "d36e15cb174012078649b489a361a71278b0fbec14cb717dc244bd9ab94a6171",
+    "scripts/application.py": "1811e3025d1129dac276a85728b8337f4878dfed4bd0c900c0fa3e65413a410c",
+    "scripts/config/r61_formal.yaml": "207de39f8b0bf75faf50e0333a7f1d3b9c36fa8127c4581b1921ba904ca5955d",
+    "scripts/config/r61_congruency_geometry.csv": "ae7137b158e4f9dc1eda6ae8ed6f8a68496dd00fac181a581b39a4e1cdcc4cc4",
+    "scripts/config/application_protocol.md": "ea6b1ebc7d0604100231dab1cd57156190b2ac6f1fff0739150dea98648d6f0f",
+    "scripts/config/original_precision_protocol.json": "f343d399a5694d823973f858286e75290a106695b1185a788551d14506623211"
+  }
+}

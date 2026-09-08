@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools==78.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bayesian-flanker-changepoints"
+version = "1.0.0"
+description = "Reproducible collapsed Bayesian change-point mixed model for trial-wise congruency effects"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy==2.4.6",
+  "scipy==1.16.3",
+  "pandas==2.3.3",
+  "matplotlib==3.11.0",
+  "PyYAML==6.0.2",
+  "ruptures==1.1.10",
+  "Pillow==12.2.0",
+  "arviz==1.2.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[tool.setuptools]
+py-modules = []
+
+[tool.pytest.ini_options]
+testpaths = ["scripts/tests"]
+markers = ["integration: requires generated full-study results; skipped when unavailable"]

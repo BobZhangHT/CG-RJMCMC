@@ -1,0 +1,47 @@
+{
+  "protocol_id": "PLOS-E-M01-E-M03-E-N04-precision-v1",
+  "created_before_precision_runs": true,
+  "analysis_scope": {
+    "frozen_interval_reanalysis": "all 3000 main-stage simulation replications (D0-D5, 500 each)",
+    "independent_precision_cases": [
+      "PC-Flanker High-first",
+      "PC-Flanker Low-first",
+      "formal D5 replicate 1",
+      "formal D5 replicate 2",
+      "formal D5 replicate 3"
+    ],
+    "selection_rule": "The two application groups and D5 replications 1, 2, and 3 are fixed in advance; no case is selected using precision outcomes.",
+    "model": "original alpha=1 factorial prior and empirical joint-partition mode",
+    "candidate_optimization_used": false
+  },
+  "sampling_budget": {
+    "chains": 3,
+    "iterations_per_chain": 15000,
+    "warmup_per_chain": 2000,
+    "initial_k": [0, 2, 4],
+    "retained_draws_per_chain": 13000,
+    "blas_threads": 1,
+    "maximum_workers": 4,
+    "conditional_extension": "A fresh, separately labelled 100000-iteration run is permitted only when the original-budget comparison fails a prespecified accuracy threshold; original trajectories remain immutable."
+  },
+  "estimands_and_checks": {
+    "intervals": "For every DGP and trial, pointwise coverage, interval width, replication-level Monte Carlo standard error, and near/far summaries; near means distance <=2 from a true cut.",
+    "paired_rmse": "Within-replication mean trajectory-RMSE differences for all method pairs in D0-D5, with special CG-RJMCMC minus PELT-BIC reporting and paired Monte Carlo standard errors.",
+    "trajectory_diagnostics": "Rank-normalized split R-hat, bulk ESS, tail ESS, and 0.025/0.975 quantile MCSE for all 64 trajectory coordinates.",
+    "discrete_diagnostics": "K plus every P(K=k) and boundary-PIP indicator; constant estimands are N/A and certified against exact posterior probabilities rather than assigned artificial ESS.",
+    "exact_posterior": "Enumerate all 27931 legal partitions with C-kernel log weights; compute p(K), boundary PIP, BMA mean, top-partition ranks, and marginal Student-t mixture quantiles at all 64 coordinates using df=2a_n and scale=sqrt((b_n/a_n)*diag(A_n^{-1}))."
+  },
+  "accuracy_thresholds": {
+    "maximum_absolute_pip_or_pk_error": 0.01,
+    "maximum_absolute_95pct_endpoint_error_log_rt": 0.002,
+    "endpoint_alternative": "If an endpoint exceeds 0.002, report its quantile MCSE and exact error explicitly; do not claim it passed.",
+    "tail_ess": "No blanket requirement that every tail ESS exceed 1500; adequacy is judged against exact posterior error."
+  },
+  "fixed_source_sha256": {
+    "scripts/run_r61_formal_experiment.py": "28ea42760957eaddc813138635231ad1350e2e4eddaa6f550efce6a4b3c1a785",
+    "scripts/r61_formal_kernel.c": "129760c70f5768485ee273927c4c6990b1d2c47c8fbac21efe639bb93c7aae61",
+    "scripts/run_r61_pc_flanker_application.py": "fdfee52d26edb5642f50d27fdb6a5565a8f92a3f537a3f502abbe74ede21590f",
+    "config/r61_formal.yaml": "37efc72f740b4aceae67dd7f53767fc6891a1a3cab863bb0305ab3e1ce829e58",
+    "config/r61_congruency_geometry.csv": "ae7137b158e4f9dc1eda6ae8ed6f8a68496dd00fac181a581b39a4e1cdcc4cc4"
+  }
+}

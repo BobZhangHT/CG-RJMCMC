@@ -1,0 +1,6 @@
+# Stable source bytes across Windows and Unix.
+* text=auto eol=lf
+
+# Do not normalize immutable historical protocol records.
+scripts/config/original_precision_protocol.json -text
+scripts/config/application_protocol.md -text
