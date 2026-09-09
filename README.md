@@ -1,89 +1,74 @@
-# A Bayesian change-point mixed model for changing congruency effects in flanker tasks
+# Bayesian change-point mixed model for changing congruency effects
 
-Code accompanying the paper. CG-RJMCMC estimates how the response-time difference between incongruent and congruent trials changes across a task, allowing for participant differences and uncertainty about when changes occur. Comparisons include NoEffect, ConstEffect, FixedSplit and PELT-BIC.
+This repository implements **CG-RJMCMC**, a Bayesian change-point mixed model for estimating how the incongruent-versus-congruent response-time effect changes during a flanker task. It accounts for participant heterogeneity and uncertainty in both the number and locations of change points. The paper compares it with NoEffect, ConstEffect, FixedSplit, and PELT-BIC.
 
-## 1. Set up
+## Quick start
 
-Download or clone this repository and open a terminal in its top-level folder. Use **Python 3.12** and a GCC-compatible C compiler on `PATH` (tested on Windows with MinGW-w64). The sampler compiles automatically when an analysis starts.
+Requirements: Python 3.12 and a GCC-compatible C compiler (for example, MinGW-w64 on Windows). The C sampler is compiled automatically on first use.
 
 ```bash
 python -m pip install -e .
 gcc --version
 python scripts/reproduce.py validate
+python scripts/reproduce.py smoke --workers 2
 ```
 
-The last command checks the analysis source files and compiler without running experiments. For a small installation check, run `python scripts/reproduce.py smoke --workers 2`; this is not the full paper analysis. Dependency versions are specified in [pyproject.toml](pyproject.toml).
+`validate` checks the source files and compiler. `smoke` is a small installation test, not the full experiment.
 
-## 2. Reproduce the real-data application
+## Use CG-RJMCMC on the real data
 
-Use **Braeutigam et al.'s PC-Flanker Experiment 1**, the dataset analyzed in the paper ([original article](https://doi.org/10.3758/s13421-023-01447-x)). Download **`RawData_Experiment1.7z`** from the authors' [OSF project](https://osf.io/6n597/) and extract its 50 participant CSV files into:
+Download `RawData_Experiment1.7z` from the [PC-Flanker OSF project](https://osf.io/6n597/) ([Braeutigam et al.](https://doi.org/10.3758/s13421-023-01447-x)) and extract its 50 CSV files directly into:
 
 ```text
 data/external/RawData_Experiment1/
 ```
 
-The 50 CSVs must be directly inside this folder, not in another nested folder. Keep the original filenames and columns; do not preprocess the files manually. Run:
+Run the analysis:
 
 ```bash
 python scripts/reproduce.py application --application-input "data/external/RawData_Experiment1"
 ```
 
-You can replace the quoted path with your extracted folder's location. This runs the paper's analysis, not a shortened demonstration: separate high-first and low-first group fits, each with three chains of 15,000 iterations and 2,000 warm-up iterations.
+The fixed pipeline preprocesses the trials, creates a deterministic participant-stratified 80/20 train/test split, fits three CG-RJMCMC chains, and evaluates all five methods. Main outputs are written to `results/reproduction/application/`:
 
-The code applies the paper's participant exclusions and retains correct visual flanker trials with response times of at least 100 ms. It removes practice blocks, the first trial of each block and flanker trials immediately following catch trials. Trial positions are mapped to 64 bins **without averaging response times**. Approximately 20% of each participant's eligible trials are held out using a deterministic split; centering uses training data only. Prediction therefore concerns new trials from the same participants, not new participants.
+- `results.json`: posterior change-point summaries, effect curves, and diagnostics.
+- `heldout_rmse.csv`: held-out prediction error for each method.
+- `run_manifest.json`: data, source, and environment fingerprints.
 
-Check these sample sizes in `results/reproduction/application/results.json`:
+For an exact reproduction, `results.json` should report input hash `b61c1f400be01e79a34b633ede24f50cf0ec844c4f8b3d85076df4eb572ed480`.
 
-| Group | Participants | Eligible trials | Training trials | Held-out trials |
-|---|---:|---:|---:|---:|
-| High-first | 24 | 8,373 | 6,698 | 1,675 |
-| Low-first | 21 | 7,423 | 5,937 | 1,486 |
+The public entry point currently expects the original PC-Flanker CSV schema. To use another dataset, map it to the arrays constructed in `prepare_group()` in [`scripts/application.py`](scripts/application.py): participant index, trial position (1–64), centered position, congruency contrast (`-0.5`/`0.5`), and centered log response.
 
-For the exact paper data, the `input_hash` in `results.json` must also match:
+## Reproduce the paper
 
-```text
-b61c1f400be01e79a34b633ede24f50cf0ec844c4f8b3d85076df4eb572ed480
-```
-
-The loader checks the file count but does not automatically enforce this fingerprint. If it differs, check the downloaded files before interpreting the run as an exact reproduction.
-
-Outputs in `results/reproduction/application/`:
-
-| File | What it tells you |
-|---|---|
-| `heldout_rmse.csv` | Prediction errors by method and group; lower RMSE is better. Errors are on the centered log-response-time scale. |
-| `results.json` | Sample counts, Markov chain effect summaries, change-point probabilities and sampling diagnostics. |
-| `run_manifest.json` | Input and source hashes plus environment information, to identify the data and code used. |
-
-See [application_protocol.md](scripts/config/application_protocol.md) for the detailed specification. Its historical paths describe the original run; use the commands here for a new reproduction. Good sampling diagnostics do not establish model adequacy, and uncertainty intervals remain conditional on the assumptions discussed in the paper.
-
-The application stage saves Monte Carlo summaries. The paper's analytic Student-\(t\) intervals for the selected partitions are produced later by the `checks` stage and written to `results/reproduction/precision/application_conditional_interval_check.csv`; columns beginning with `exact_` contain the reported analytic values, while `empirical_` columns retain the corresponding sampled quantiles. The same stage writes `results/reproduction/checks/participant_level_summary.csv`, where complete participants are resampled to assess the two phase-change directions and their direct order-by-phase contrast.
-
-## 3. Reproduce simulations and paper outputs
-
-For the complete workflow, first obtain the Experiment 1 data above, then run:
+Run the complete workflow after downloading the real data:
 
 ```bash
 python scripts/reproduce.py all --workers 2 --application-input "data/external/RawData_Experiment1"
 ```
 
-The full study includes 3,000 primary and 1,600 sensitivity simulation datasets and can take substantial time. Increase `--workers` to use more CPU processes for simulations if resources permit. Individual stages are also available:
+This runs the full simulations (3,000 primary and 1,600 sensitivity datasets), real-data analysis, checks, figures, and supporting-data export. It can take substantial time; increase `--workers` according to available CPU cores.
 
-| Suffix after `python scripts/reproduce.py` | Purpose / prerequisites |
-|---|---|
-| `simulation --workers 2` | Full simulations using the included settings. |
-| `application` | Real-data analysis; requires downloaded data. |
-| `checks` | Analytic selected-partition intervals, participant-level resampling, uncertainty, sensitivity and predictive checks; requires full simulation and application results plus raw data. |
-| `figures` | Main tables, figures and submission TIFFs; requires full simulation and application results. |
-| `supporting` | Indexed supporting-data archive with replication-level metrics and reported table/figure source values; requires preceding analysis and check outputs. |
+To run stages separately:
 
-Results go to `results/reproduction/`; figures, tables and the supporting-data archive go to `manuscript/reproduced/`. Figure export does not compile the manuscript PDF. Add `--dry-run` to inspect an analysis command without running it.
+```bash
+python scripts/reproduce.py simulation --workers 2
+python scripts/reproduce.py application --application-input "data/external/RawData_Experiment1"
+python scripts/reproduce.py checks --application-input "data/external/RawData_Experiment1"
+python scripts/reproduce.py figures
+python scripts/reproduce.py supporting
+```
 
-For a repeat run, choose fresh directories by adding `--output-root results/reproduction_v2 --assets manuscript/reproduced_v2`, and use the same options for subsequent stages. The application refuses to overwrite a nonempty output folder; simulations resume only when stored settings and source fingerprints match. If you already ran the application alone, use the remaining individual stages or choose fresh directories for `all`. Runtime varies across computers.
+Run these stages in order: later stages consume outputs from the earlier ones, and `checks` also needs the raw data path.
 
-## Data, code and citation
+Results are saved under `results/reproduction/`, while reproduced figures, tables, and supporting files are saved under `manuscript/reproduced/`. Use `--dry-run` to inspect commands. For a clean rerun without overwriting existing outputs, add:
 
-- **Real-data application:** the downloaded PC-Flanker Experiment 1 files above. External data are not covered by this repository's MIT license.
-- **Simulation design only:** [r61_congruency_geometry.csv](scripts/config/r61_congruency_geometry.csv) contains 49 observed 64-position congruency sequences from [Lost in Migration](https://doi.org/10.5281/zenodo.14838065), distributed under CC0. They set simulated trial conditions; they are **not** the real-data response times. Simulated effects and responses are generated anew.
-- **Code:** `scripts/reproduce.py` is the common entry point. Other files in `scripts/` implement sampling, analyses and exports; `scripts/config/` holds settings and provenance. Raw data, generated results, manuscript files, build products and local tests are excluded from the public source release.
-- **Reuse:** see the [MIT license](LICENSE) and [CITATION.cff](CITATION.cff). To list public source files without committing or uploading anything, run `python scripts/reproduce.py export`.
+```bash
+--output-root results/reproduction_v2 --assets manuscript/reproduced_v2
+```
+
+The detailed real-data protocol is in [`scripts/config/application_protocol.md`](scripts/config/application_protocol.md). Configuration and dependency versions are recorded in [`scripts/config/r61_formal.yaml`](scripts/config/r61_formal.yaml) and [`pyproject.toml`](pyproject.toml).
+
+## License and citation
+
+Code is released under the [MIT License](LICENSE). See [`CITATION.cff`](CITATION.cff) for citation metadata. The external PC-Flanker data are subject to their original terms.

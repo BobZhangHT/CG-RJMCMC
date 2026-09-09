@@ -75,7 +75,7 @@ READABLE_CHECK_LABELS = {
     "upper_tail_rate": "Upper tail rate",
     "max_abs_participant_mean": "Participant mean (max abs.)",
     "max_abs_phase_congruency_mean": "Phase/condition mean (max abs.)",
-    "participant_contrast_sd": "Participant-phase\nresidual contrast SD",
+    "participant_contrast_sd": "Participant-phase\nresidual effect SD",
     "lag1_analyzed_order_signed": "Within-block lag-1",
     "lag1_distance1_signed": "Strict native-distance-1 lag",
 }
@@ -530,7 +530,6 @@ def fit_case(
     base_summary["acceptance"] = acceptance
     curve = np.asarray(base_summary["bma_curve"], dtype=float)
     joint_state = list(base_summary["joint_map"])
-    participant_level = participant_level_change_summary(all_contrast_rows)
     result = {
         "case": spec,
         "nuisance_columns": nuisance_names,
@@ -741,10 +740,19 @@ def residual_summary_rows(
 
 
 def participant_contrast_rows(
-    train: pd.DataFrame, residual: np.ndarray, curve: np.ndarray, group: str
+    train: pd.DataFrame,
+    full_model_residual: np.ndarray,
+    curve: np.ndarray,
+    group: str,
 ) -> list[dict[str, Any]]:
+    """Construct participant effects after residualizing the complete fitted mean.
+
+    The condition difference in the full-model residual is added to the nominal
+    phase-average population effect.  This standardizes each participant-phase
+    summary for its observed position mix without adding the fitted effect twice.
+    """
     work = train.copy()
-    work["residual"] = residual
+    work["residual"] = full_model_residual
     phase_effect = {
         "before": float(np.mean(curve[:32])),
         "after": float(np.mean(curve[32:])),
@@ -966,7 +974,7 @@ def plot_sensitivity(groups: list[dict[str, Any]], paths: list[Path]) -> None:
             )
         ax.axvline(12.5, color="0.65", linestyle=":", linewidth=1)
         ax.axvline(32.5, color="0.25", linestyle="--", linewidth=1)
-        ax.set_ylabel("log RT contrast")
+        ax.set_ylabel("log-RT congruency effect")
         ax.set_title(group["group"])
     axes[-1].set_xlabel("analysis bin")
     axes[0].legend(ncol=2, fontsize=8, frameon=False)
@@ -1025,7 +1033,7 @@ def report_text(result: dict[str, Any]) -> str:
                 f"## {group['group']}",
                 "",
                 f"Nominal PIP(32)={nominal['PIP32']:.4f}, PIP(12)={nominal['PIP12']:.4f}, joint state has K={nominal['joint_map_K']} and cuts={nominal['joint_map_cuts']}, and held-out RMSE={nominal['heldout_RMSE']:.5f}.",
-                f"Across the six prespecified cases, PIP(32) ranged {min(pip32):.4f}--{max(pip32):.4f}, PIP(12) ranged {min(pip12):.4f}--{max(pip12):.4f}, the posterior mean after-minus-before phase contrast ranged {min(changes):.4f}--{max(changes):.4f}, and held-out RMSE ranged {min(rmse):.5f}--{max(rmse):.5f}.",
+                f"Across the six prespecified cases, PIP(32) ranged {min(pip32):.4f}--{max(pip32):.4f}, PIP(12) ranged {min(pip12):.4f}--{max(pip12):.4f}, the posterior mean after-minus-before phase change ranged {min(changes):.4f}--{max(changes):.4f}, and held-out RMSE ranged {min(rmse):.5f}--{max(rmse):.5f}.",
                 "",
             ]
         )
@@ -1061,7 +1069,8 @@ def report_text(result: dict[str, Any]) -> str:
             [
                 "## Participant-level phase changes",
                 "",
-                "Adjusted before/after contrasts were paired within each participant. "
+                "Adjusted before/after congruency effects were paired within each participant. "
+                "The adjustment was held fixed during resampling. "
                 "Intervals used 50,000 deterministic nonparametric bootstrap resamples "
                 "of complete participants within randomized-order groups.",
                 "",
@@ -1120,11 +1129,11 @@ def supplement_tex(result: dict[str, Any]) -> str:
     header = r"""\section{Prespecified real-application model checks}\label{sec:application-checks}
  The nominal joint-partition analysis with factorial count prior $p(K)\propto 1/K!$ remains primary. We used the unchanged sampler for five bounded, fixed-prior sensitivities: ten common retained-block effects with precision 4; participant-intercept variance ratios 0.25 and 4; and mean-zero participant congruency-slope variance ratios 0.01 and 0.1. These alternatives were specified before inspecting their results and were not selected as replacements.
 
-The design-aligned boundary after bin 32 was retained in every sensitivity (minimum PIP @HIGH_PIP32@ in the high-first group and @LOW_PIP32@ in the low-first group), and every 95\% posterior interval for the draw-wise after-minus-before phase contrast retained the nominal direction. In contrast, the high-first bin-12 PIP changed from @HIGH_NOMINAL_PIP12@ under the nominal specification to @HIGH_BLOCK_PIP12@ with common retained-block effects. The early high-first boundary is therefore not robust to the checked common time structure and should remain exploratory; the phase boundary and reversal-aligned direction are robust only within this bounded set of specifications.
+The design-aligned boundary after bin 32 was retained in every sensitivity (minimum PIP @HIGH_PIP32@ in the high-first group and @LOW_PIP32@ in the low-first group), and every 95\% posterior interval for the draw-wise after-minus-before phase change retained the nominal direction. By comparison, the high-first bin-12 PIP changed from @HIGH_NOMINAL_PIP12@ under the nominal specification to @HIGH_BLOCK_PIP12@ with common retained-block effects. The early high-first boundary is therefore not robust to the checked common time structure and should remain exploratory; the phase boundary and reversal-aligned direction are robust only within this bounded set of specifications.
 
 \begin{table}[htbp]
 \centering
-\caption{Sensitivity in the high-first ($n=24$) and low-first ($n=21$) groups. PIP($b$) is the posterior probability of a cut after bin $b$. Phase change is the posterior mean log-RT congruency contrast after minus before the experimental reversal, with its 95\% credible interval computed within posterior draws. RMSE is held-out log-RT RMSE conditional on existing participants.}
+\caption{Sensitivity in the high-first ($n=24$) and low-first ($n=21$) groups. PIP($b$) is the posterior probability of a cut after bin $b$. Phase change is the posterior mean change in the log-RT congruency effect after versus before the experimental reversal, with its 95\% credible interval computed within posterior draws. RMSE is held-out log-RT RMSE conditional on existing participants.}
 \label{tab:application-checks}
 \scriptsize
 \begin{tabular}{@{}llrrrr@{}}
@@ -1143,15 +1152,15 @@ Order & Model & PIP(12) & PIP(32) & Phase change (95\% CrI) & RMSE \\
 \end{tabular}
 \end{table}
 
-As a participant-level robustness analysis, we computed one adjusted congruency contrast for each participant in each retained phase from the training responses. The adjustment subtracts the nominal fitted nuisance contribution and adds back the nominal phase-average population contrast. We then formed the within-participant after-minus-before difference. Group means give equal weight to participants, rather than to response rows, and percentile intervals use 50,000 deterministic nonparametric bootstrap samples of complete participants within randomized-order groups. The direct order-by-phase contrast is the low-first mean change minus the high-first mean change.
+As a participant-level robustness analysis, we computed one adjusted congruency effect for each participant in each retained phase from the training responses. The adjustment subtracts the nominal posterior mean of the complete fitted response, including its position-specific congruency effect, contrasts the resulting residuals between conditions, and restores the nominal phase-average population effect. We then formed the within-participant after-minus-before difference. Group means give equal weight to participants, rather than to response rows, and percentile intervals use 50,000 deterministic nonparametric bootstrap samples of complete participants within randomized-order groups. The fitted adjustment is held fixed during resampling. The direct order-by-phase difference is the low-first mean change minus the high-first mean change.
 
 \begin{table}[htbp]
 \centering
-\caption{Participant-level robustness analysis of the phase change. Estimates are after-minus-before changes in the adjusted log-RT congruency contrast. The final row is the direct order-by-phase contrast. Intervals are 95\% participant-bootstrap percentile intervals. They assess variation across participants and do not recalibrate posterior boundary probabilities or the nominal model's segment intervals.}
+\caption{Participant-level robustness analysis of the phase change. Estimates are after-minus-before changes in the adjusted log-RT congruency effect. The final row is the direct order-by-phase difference. Intervals are 95\% participant-bootstrap percentile intervals. They assess variation across participants and do not recalibrate posterior boundary probabilities or the nominal model's segment intervals.}
 \label{tab:participant-phase-change}
 \begin{tabular}{lcc}
 \toprule
-Contrast & Participants & Estimate (95\% interval) \\
+Quantity & Participants & Estimate (95\% interval) \\
 \midrule
 @PARTICIPANT_ROWS@
 \bottomrule
@@ -1160,7 +1169,7 @@ Contrast & Participants & Estimate (95\% interval) \\
 
 Posterior predictive checks used the training observations and 1000 joint posterior draws per group. At draw $s$, the observed residual vector was $\bm e^{(s)}=\bm y-\bm\mu^{(s)}$, where $\bm\mu^{(s)}$ is the fitted observation-level mean from that draw's partition and jointly sampled coefficients. Replicated responses used the same design, participants, fitted mean, and residual scale $\sigma^{(s)}$; their residuals were independent $N(0,\{\sigma^{(s)}\}^2)$ draws. Thus observed discrepancies also varied across posterior draws.
 
-Location and dispersion were the overall residual mean and sample SD divided by $\sigma^{(s)}$. Tail rates were the proportions below $-2\sigma^{(s)}$ and above $2\sigma^{(s)}$. Participant and phase-by-congruency checks used the maximum absolute residual cell mean, divided by $\sigma^{(s)}$. Contrast dispersion was the sample SD of residual incongruent-minus-congruent mean differences across participant-by-phase cells, also divided by $\sigma^{(s)}$; cells missing either condition were omitted. The phase indicator separated bins 1--32 and 33--64. Lag checks pooled residual pairs within participants and retained blocks and calculated Pearson correlations. One used consecutive analyzed training records, whose native distances may exceed one; the other restricted those pairs to native distance one. No pair crossed a block or the omitted practice interval.
+Location and dispersion were the overall residual mean and sample SD divided by $\sigma^{(s)}$. Tail rates were the proportions below $-2\sigma^{(s)}$ and above $2\sigma^{(s)}$. Participant and phase-by-congruency checks used the maximum absolute residual cell mean, divided by $\sigma^{(s)}$. Congruency-effect dispersion was the sample SD of residual incongruent-minus-congruent mean differences across participant-by-phase cells, also divided by $\sigma^{(s)}$; cells missing either condition were omitted. The phase indicator separated bins 1--32 and 33--64. Lag checks pooled residual pairs within participants and retained blocks and calculated Pearson correlations. One used consecutive analyzed training records, whose native distances may exceed one; the other restricted those pairs to native distance one. No pair crossed a block or the omitted practice interval.
 
 For each discrepancy, let $p$ be the proportion of replicated values at least as large as their draw-matched observed values. Absolute values were compared for the signed overall mean and the two correlations. The descriptive flag was $\min\{1,2\min(p,1-p)\}\leq0.05$. This folded tail-area rule summarizes disagreement within the posterior predictive check; it is not a calibrated hypothesis test or a multiplicity-adjusted decision rule.
 
@@ -1174,11 +1183,11 @@ For each discrepancy, let $p$ be the proportion of replicated values at least as
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=.95\linewidth]{revision_assets/application_ppc.pdf}
-\caption{Nominal posterior predictive checks on training observations. Residual means, residual SD, maximum absolute participant and phase/condition means, and participant-by-phase residual-contrast dispersion are standardized by the posterior draw of $\sigma$; tail rates use thresholds $\pm2\sigma$, and lag statistics are correlations. Crosses denote median observed discrepancies over posterior draws. Blue points and intervals are the median and 95\% posterior-predictive range of replicated discrepancies, not credible intervals for model effects.}
+\caption{Nominal posterior predictive checks on training observations. Residual means, residual SD, maximum absolute participant and phase/condition means, and participant-by-phase dispersion in residual congruency effects are standardized by the posterior draw of $\sigma$; tail rates use thresholds $\pm2\sigma$, and lag statistics are correlations. Crosses denote median observed discrepancies over posterior draws. Blue points and intervals are the median and 95\% posterior-predictive range of replicated discrepancies, not credible intervals for model effects.}
 \label{fig:application-ppc}
 \end{figure}
 
-The nominal posterior predictive checks retained discrepancies in both groups for lower and upper tail rates, participant-by-phase residual-contrast dispersion, analyzed-order lag-1 dependence, and strict native-distance-one lag-1 dependence. Thus the sensitivity results do not repair all observed tail, individual-heterogeneity, or serial-dependence mismatch. These checks provide bounded evidence rather than a universal correction for misspecification; agreement among fixed prior ratios cannot establish robustness to every possible residual or random-effects structure.
+The nominal posterior predictive checks retained discrepancies in both groups for lower and upper tail rates, participant-by-phase dispersion in residual congruency effects, analyzed-order lag-1 dependence, and strict native-distance-one lag-1 dependence. Thus the sensitivity results do not repair all observed tail, individual-heterogeneity, or serial-dependence mismatch. These checks provide bounded evidence rather than a universal correction for misspecification; agreement among fixed prior ratios cannot establish robustness to every possible residual or random-effects structure.
 """
     return header + body + footer.replace("@PARTICIPANT_ROWS@", participant_body)
 
@@ -1315,19 +1324,25 @@ def run(
             )
         if nominal_chains is None or nominal_stats is None:
             raise AssertionError("nominal fit missing")
-        ppc, ppc_draw_rows, posterior_mean_mu, posterior_mean_sigma = run_ppc(
+        ppc, ppc_draw_rows, posterior_mean_fitted, posterior_mean_sigma = run_ppc(
             train, participants, first_pc, nominal_chains, ppc_replicates
         )
-        residual = train["y"].to_numpy(dtype=float) - posterior_mean_mu
+        full_model_residual = (
+            train["y"].to_numpy(dtype=float) - posterior_mean_fitted
+        )
         group_name = first_pc + "-first"
         all_ppc_draw_rows.extend(ppc_draw_rows)
         all_residual_rows.extend(
-            residual_summary_rows(train, residual, posterior_mean_sigma, group_name)
+            residual_summary_rows(
+                train, full_model_residual, posterior_mean_sigma, group_name
+            )
         )
         all_contrast_rows.extend(
-            participant_contrast_rows(train, residual, nominal_curve, group_name)
+            participant_contrast_rows(
+                train, full_model_residual, nominal_curve, group_name
+            )
         )
-        all_lag_rows.extend(lag_summary_rows(train, residual, group_name))
+        all_lag_rows.extend(lag_summary_rows(train, full_model_residual, group_name))
         groups.append(
             {
                 "group": group_name,
@@ -1337,6 +1352,7 @@ def run(
                 "nominal_residual_sigma_reference": posterior_mean_sigma,
             }
         )
+    participant_level = participant_level_change_summary(all_contrast_rows)
     result = {
         "schema_version": 1,
         "protocol": str(APPLICATION_PROTOCOL.relative_to(ROOT)),
