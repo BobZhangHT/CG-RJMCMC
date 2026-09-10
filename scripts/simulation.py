@@ -154,8 +154,19 @@ def load_config(path: Path) -> dict[str, Any]:
     if cfg["design"]["trials"] != T:
         raise ValueError("the formal kernel requires exactly 64 trial positions")
     d5 = cfg["dgps"]["D5"]
-    if d5["cuts"] != [13, 25, 39, 51] or d5["levels"] != [0.14, 0.05, 0.11, 0.04, 0.12]:
-        raise ValueError("D5 must be the frozen cuts 13,25,39,51 staircase")
+    expected_d5 = {
+        "R61-FORMAL-v1": {
+            "cuts": [13, 25, 39, 51],
+            "levels": [0.14, 0.05, 0.11, 0.04, 0.12],
+        },
+        "R61-D5-BALANCED-v1": {
+            "cuts": [13, 25, 39, 51],
+            "levels": [0.13125, 0.03125, 0.13125, 0.03125, 0.13125],
+        },
+    }
+    namespace = cfg.get("namespace")
+    if namespace not in expected_d5 or d5 != expected_d5[namespace]:
+        raise ValueError(f"D5 does not match the registered design for {namespace!r}")
     sampler = cfg["sampler"]
     if sampler["chains"] != 3 or len(sampler["initial_k"]) != 3:
         raise ValueError("A3 requires exactly three chains and three initial states")
@@ -1098,6 +1109,9 @@ def run(args: argparse.Namespace) -> int:
     """Coordinate resumable replicates; fingerprinted summaries permit safe skipping."""
     config_path = Path(args.config).resolve()
     cfg = load_config(config_path)
+    if args.seed_namespace is not None:
+        cfg = json.loads(json.dumps(cfg))
+        cfg["namespace"] = args.seed_namespace
     if args.smoke:
         cfg = json.loads(json.dumps(cfg))
         cfg["replications"].update(main_reps=1, sensitivity_reps=1, kmax_reps=1)
@@ -1116,7 +1130,13 @@ def run(args: argparse.Namespace) -> int:
         "config_file": sha256_file(config_path),
         "geometry_file": sha256_file(geometry_path),
     }
-    resolved = {"config": cfg, "stages": sorted(stages), "geometry_hash": geometry_hash}
+    resolved = {
+        "config": cfg,
+        "stages": sorted(stages),
+        "dgp_filter": args.dgp,
+        "replications_override": args.replications,
+        "geometry_hash": geometry_hash,
+    }
     fingerprint = make_fingerprint(resolved, source_hashes)
     validate_resume_target(output, fingerprint)
     output.mkdir(parents=True, exist_ok=True)
@@ -1140,6 +1160,13 @@ def run(args: argparse.Namespace) -> int:
     _, kernel_hash = compile_kernel(ROOT / "build" / "r61_formal")
     assert kernel_hash == source_hashes["kernel"]
     cases = expand_cases(cfg, stages)
+    if args.dgp is not None:
+        cases = [case for case in cases if case["dgp"] == args.dgp]
+    if args.replications is not None:
+        for case in cases:
+            case["reps"] = args.replications
+    if not cases:
+        raise ValueError("the requested stage and DGP filter produced no simulation cells")
     total = sum(case["reps"] for case in cases)
     completed = failed = skipped = 0
     overall = time.perf_counter()
@@ -1299,6 +1326,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stage", choices=("all", "main", "sensitivity", "kmax"), default="all"
     )
+    parser.add_argument(
+        "--dgp",
+        choices=tuple(f"D{i}" for i in range(6)),
+        help="run only cells generated from the selected DGP",
+    )
+    parser.add_argument(
+        "--replications",
+        type=int,
+        help="override the registered replication count for each selected cell",
+    )
+    parser.add_argument(
+        "--seed-namespace",
+        help="override only the deterministic seed namespace for a separate pilot run",
+    )
     parser.add_argument("--output")
     parser.add_argument("--fail-fast", action="store_true")
     parser.add_argument("--aggregate-every", type=int, default=100)
@@ -1314,6 +1355,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--aggregate-every must be positive")
     if args.workers < 1:
         parser.error("--workers must be positive")
+    if args.replications is not None and args.replications < 1:
+        parser.error("--replications must be positive")
     if args.smoke_warmup >= args.smoke_iterations:
         parser.error("smoke warmup must be smaller than iterations")
     return args

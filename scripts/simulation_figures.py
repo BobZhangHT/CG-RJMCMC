@@ -885,11 +885,11 @@ def table4(
         [
             "DGP",
             "Valid",
-            "$n$",
-            "Max $\\widehat R$",
-            "Min ESS",
-            "Min ESS/s",
-            "Runtime (s)",
+            "Datasets",
+            "Maximum $\\widehat R$",
+            "Minimum ESS",
+            "Minimum ESS per second",
+            "Runtime (seconds)",
         ],
         latex_rows,
         "lrrrrrr",
@@ -991,7 +991,7 @@ def figure6(
         ("trajectory_RMSE", "Trajectory RMSE", BLUE),
         ("correct_K", "Correct $K$ proportion", GREEN),
         ("min_bulk_ESS", "Minimum bulk ESS", PURPLE),
-        ("runtime_seconds", "Runtime (s)", ORANGE),
+        ("runtime_seconds", "Runtime (seconds)", ORANGE),
     ]
     fig, axes = plt.subplots(
         2, 4, figsize=(8.2, 7.2), gridspec_kw={"height_ratios": [6, 12]}
@@ -1011,6 +1011,7 @@ def figure6(
             raise ValueError(f"Expected 500 main replications for {dgp}")
         for col, (metric, xlabel, color) in enumerate(metrics):
             ax = axes[row, col]
+            largest_upper = 0.0
             reference = (
                 base[metric].mean() if metric == "correct_K" else base[metric].median()
             )
@@ -1041,6 +1042,7 @@ def figure6(
                         lo = hi = mid = 0.0
                 else:
                     lo, mid, hi = np.quantile(values, [0.25, 0.5, 0.75])
+                largest_upper = max(largest_upper, float(hi))
                 ax.errorbar(
                     mid,
                     y,
@@ -1078,8 +1080,14 @@ def figure6(
                 ax.set_xticks([0, 20000, 40000], ["0", "20", "40"])
                 ax.set_xlabel("Minimum bulk ESS\n(thousands)", fontsize=9)
             elif metric == "trajectory_RMSE":
-                ax.set_xlim(0, 0.032)
-                ax.set_xticks([0, 0.015, 0.03])
+                upper = max(0.032, largest_upper * 1.08)
+                if upper <= 0.032:
+                    ax.set_xlim(0, 0.032)
+                    ax.set_xticks([0, 0.015, 0.03])
+                else:
+                    upper = np.ceil(upper / 0.01) * 0.01
+                    ax.set_xlim(0, upper)
+                    ax.set_xticks(np.linspace(0, upper, 3))
             else:
                 ax.set_xlim(0, 16)
                 ax.set_xticks([0, 8, 16])
