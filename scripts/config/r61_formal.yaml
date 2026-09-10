@@ -2,8 +2,7 @@ schema_version: 1
 namespace: R61-FORMAL-v1
 output_dir: results/reproduction/simulation
 
-# Frozen study settings. Only the output and geometry locations were relocated;
-# the experimental parameters, replication counts and seed namespace are unchanged.
+# Formal study settings for the publication analysis.
 replications:
   main_reps: 500
   sensitivity_reps: 100
@@ -42,7 +41,7 @@ dgps:
   D2: {cuts: [16], levels: [0.14, 0.04]}
   D3: {cuts: [48], levels: [0.04, 0.14]}
   D4: {cuts: [16, 48], levels: [0.12, 0.03, 0.10]}
-  D5: {cuts: [13, 25, 39, 51], levels: [0.14, 0.05, 0.11, 0.04, 0.12]}
+  D5: {cuts: [13, 25, 39, 51], levels: [0.13125, 0.03125, 0.13125, 0.03125, 0.13125]}
 
 sensitivity:
   sample_size:

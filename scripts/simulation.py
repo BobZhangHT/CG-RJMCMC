@@ -155,17 +155,11 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ValueError("the formal kernel requires exactly 64 trial positions")
     d5 = cfg["dgps"]["D5"]
     expected_d5 = {
-        "R61-FORMAL-v1": {
-            "cuts": [13, 25, 39, 51],
-            "levels": [0.14, 0.05, 0.11, 0.04, 0.12],
-        },
-        "R61-D5-BALANCED-v1": {
-            "cuts": [13, 25, 39, 51],
-            "levels": [0.13125, 0.03125, 0.13125, 0.03125, 0.13125],
-        },
+        "cuts": [13, 25, 39, 51],
+        "levels": [0.13125, 0.03125, 0.13125, 0.03125, 0.13125],
     }
     namespace = cfg.get("namespace")
-    if namespace not in expected_d5 or d5 != expected_d5[namespace]:
+    if namespace != "R61-FORMAL-v1" or d5 != expected_d5:
         raise ValueError(f"D5 does not match the registered design for {namespace!r}")
     sampler = cfg["sampler"]
     if sampler["chains"] != 3 or len(sampler["initial_k"]) != 3:
