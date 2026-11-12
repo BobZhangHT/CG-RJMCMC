@@ -39,7 +39,7 @@ For an exact reproduction, `results.json` should report input hash `b61c1f400be0
 
 The public entry point currently expects the original PC-Flanker CSV schema. To use another dataset, map it to the arrays constructed in `prepare_group()` in [`scripts/application.py`](scripts/application.py): participant index, trial position (1–64), centered position, congruency contrast (`-0.5`/`0.5`), and centered log response.
 
-## Reproduce the paper
+## Primary simulation and application workflows
 
 Run the complete workflow after downloading the real data:
 
@@ -68,6 +68,20 @@ Results are saved under `results/reproduction/`, while reproduced figures, table
 ```
 
 The detailed real-data protocol is in [`scripts/config/application_protocol.md`](scripts/config/application_protocol.md). Configuration and dependency versions are recorded in [`scripts/config/r61_formal.yaml`](scripts/config/r61_formal.yaml) and [`pyproject.toml`](pyproject.toml).
+
+## Penalized segmentation benchmark
+
+PELT-BIC minimizes the position-weighted within-segment sum of squares plus
+`log(T)` per segment. Its minimum segment length applies to both candidate
+segments and pruning: a dominated prefix remains eligible until the dominating
+prefix can be extended by a legal segment. This delayed-pruning implementation
+preserves the unrestricted number of changes; the Bayesian `Kmax` setting does
+not cap PELT. The prior, data-generating processes and CG-RJMCMC kernel are
+unchanged.
+
+Source fingerprints are recorded in `scripts/config/reproduction_sources.json`.
+Use a new output directory when running the updated source against an existing
+experiment cache so the archived outputs retain their original provenance.
 
 ## License and citation
 

@@ -412,14 +412,39 @@ class WeightedL2(BaseCost):
 def pelt_bic(
     statistic: np.ndarray, weights: np.ndarray, minseg: int
 ) -> tuple[int, ...]:
-    """Run the named PELT algorithm with the prespecified log(T) penalty."""
-    signal = np.c_[np.asarray(statistic, float), np.asarray(weights, float)]
-    breakpoints = (
-        rpt.Pelt(custom_cost=WeightedL2(minseg), min_size=minseg, jump=1)
-        .fit(signal)
-        .predict(pen=math.log(len(signal)))
-    )
-    return tuple(int(value) for value in breakpoints[:-1])
+    """Unrestricted PELT with log(T) per segment and length-safe pruning.
+
+    A domination witness at endpoint t permits removal only at t+minseg,
+    when the replacement segment is feasible. Near-equalities are retained;
+    selection uses the actual objective and the first (smallest) predecessor.
+    """
+    y, w = np.asarray(statistic, float), np.asarray(weights, float)
+    if y.ndim != 1 or w.shape != y.shape or not len(y):
+        raise ValueError("statistic and weights must be nonempty equal-length vectors")
+    if not np.all(np.isfinite(y)) or not np.all(np.isfinite(w)) or np.any(w <= 0):
+        raise ValueError("finite statistics and strictly positive finite weights required")
+    if (isinstance(minseg, (bool, np.bool_))
+            or not isinstance(minseg, (int, np.integer))
+            or not 1 <= minseg <= len(y)):
+        raise ValueError("minseg must be an integer between 1 and T")
+    n, penalty = len(y), math.log(len(y))
+    cost = WeightedL2(minseg).fit(np.c_[y, w])
+    optimum, paths = {0: 0.0}, {0: ()}
+    active, expiry = [], {}
+    for end in range(minseg, n + 1):
+        active = [s for s in active if expiry.get(s, n + 1) > end]
+        new = end - minseg
+        if new == 0 or new >= minseg:
+            active.append(new)
+        candidates = [(optimum[s] + cost.error(s, end) + penalty, s) for s in active]
+        value, start = min(candidates, key=lambda item: item[0])
+        optimum[end] = value
+        paths[end] = paths[start] + ((start,) if start else ())
+        for candidate, predecessor in candidates:
+            guard = 1e-12 * max(1.0, abs(candidate), abs(value))
+            if candidate - penalty - value > guard:
+                expiry[predecessor] = min(expiry.get(predecessor, n + 1), end + minseg)
+    return paths[n]
 
 
 def pelt_fit(

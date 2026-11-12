@@ -157,14 +157,22 @@ def step_curve(cuts: Iterable[int], levels: Iterable[float], trials: int) -> np.
 
 
 def collect_replicates(
-    sim_root: Path, fingerprint: str | None
+    sim_root: Path, fingerprint: str | None,
+    source_records: dict[Path, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[tuple[str, str, int], Path]]:
+    """Collect originals, optionally from an explicitly verified input cache.
+
+    A supplied cache also acts as an explicit inventory: unlisted paths are
+    excluded. The default continues to read the original files directly.
+    """
     records: list[dict[str, Any]] = []
     paths: dict[tuple[str, str, int], Path] = {}
     for path in sorted(sim_root.glob("replicates/*/*/rep_*/summary.json")):
         try:
-            value = read_json(path)
+            value = read_json(path) if source_records is None else source_records.get(path)
         except (OSError, ValueError):
+            continue
+        if value is None:
             continue
         if fingerprint and value.get("run_fingerprint") != fingerprint:
             continue
