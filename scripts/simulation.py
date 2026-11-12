@@ -147,6 +147,16 @@ def deterministic_seed(namespace: str, label: str) -> int:
     )
 
 
+
+def case_namespace(cfg: dict[str, Any], case: dict[str, Any]) -> str:
+    """Preserve historical per-DGP namespaces in a unified reproduction run."""
+    return str(cfg.get("namespace_by_dgp", {}).get(case["dgp"], cfg["namespace"]))
+
+
+def override_seed_namespace(cfg: dict[str, Any], namespace: str) -> dict[str, Any]:
+    """An explicit pilot override applies to every DGP, not only the fallback."""
+    return {**cfg, "namespace": namespace, "namespace_by_dgp": {}}
+
 def load_config(path: Path) -> dict[str, Any]:
     """Load the frozen protocol and enforce kernel- and design-level invariants."""
     with open(path, encoding="utf-8") as handle:
@@ -391,7 +401,10 @@ class WeightedL2(BaseCost):
 
     def fit(self, signal: np.ndarray) -> "WeightedL2":
         values = np.asarray(signal, float)
-        self.y, self.w = values[:, 0], values[:, 1]
+        self.w = values[:, 1]
+        # A common shift leaves every segment SSE invariant and avoids subtracting
+        # squared large offsets from nearly equal raw second moments.
+        self.y = values[:, 0] - values[0, 0]
         self.sw = np.r_[0.0, np.cumsum(self.w)]
         self.swy = np.r_[0.0, np.cumsum(self.w * self.y)]
         self.swy2 = np.r_[0.0, np.cumsum(self.w * self.y * self.y)]
@@ -570,8 +583,25 @@ def run_chain(
     minseg: int,
     prior_power: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Run one seeded A3 chain; rows are [K, five cut slots, 64 expanded effects]."""
-    output = np.empty((iterations - warmup, DRAW_WIDTH), dtype=float)
+    """Run one seeded A3 chain; validate buffers before entering native code."""
+    H = np.ascontiguousarray(H, dtype=np.float64)
+    h = np.ascontiguousarray(h, dtype=np.float64)
+    if H.shape != (T, T) or h.shape != (T,):
+        raise ValueError("H must have shape (64, 64) and h shape (64,)")
+    if not np.isfinite(H).all() or not np.isfinite(h).all() or not np.isfinite(yqy):
+        raise ValueError("sufficient statistics must be finite")
+    if not np.isfinite(prior_power):
+        raise ValueError("prior_power must be finite")
+    integer_args = {"n": n, "iterations": iterations, "warmup": warmup,
+                    "init_k": init_k, "kmax": kmax, "minseg": minseg}
+    for name, value in integer_args.items():
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or not 0 <= value <= np.iinfo(np.int32).max:
+            raise ValueError(f"{name} must be a nonnegative C int")
+    if iterations <= warmup or not 0 <= init_k <= kmax <= MAX_K or minseg < 1 or minseg * (kmax + 1) > T:
+        raise ValueError("invalid chain budget or partition support")
+    if isinstance(seed, (bool, np.bool_)) or not isinstance(seed, (int, np.integer)) or not 0 <= seed <= np.iinfo(np.uint64).max:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    output = np.empty((iterations - warmup, DRAW_WIDTH), dtype=np.float64)
     stats = np.zeros(8, dtype=np.int64)
     rc = library.r61_formal_run(
         ptr(H, ctypes.c_double),
@@ -790,7 +820,7 @@ def fit_replicate(
     conditionally aligned segment levels against the known simulated truth.
     """
     label = f"{case['stage']}|{case['cell']}|R{rep:06d}"
-    namespace = cfg["namespace"]
+    namespace = case_namespace(cfg, case)
     data_seed = deterministic_seed(namespace, f"DATA|{label}")
     design = design_for_n(base, case["participants"])
     y, truth_curve, truth_levels = generate_outcome(cfg, case, design, data_seed)
@@ -1129,8 +1159,7 @@ def run(args: argparse.Namespace) -> int:
     config_path = Path(args.config).resolve()
     cfg = load_config(config_path)
     if args.seed_namespace is not None:
-        cfg = json.loads(json.dumps(cfg))
-        cfg["namespace"] = args.seed_namespace
+        cfg = override_seed_namespace(cfg, args.seed_namespace)
     if args.smoke:
         cfg = json.loads(json.dumps(cfg))
         cfg["replications"].update(main_reps=1, sensitivity_reps=1, kmax_reps=1)

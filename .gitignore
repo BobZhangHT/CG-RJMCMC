@@ -1,4 +1,4 @@
-# Only the compact public code release is eligible for GitHub.
+# Public source, tests and the four reproduction reports are eligible for GitHub.
 /*
 !/.gitignore
 !/.gitattributes
@@ -9,9 +9,15 @@
 !/scripts/
 !/.github/
 
-# Local-only numerical and regression tests.
-/scripts/tests/
-/scripts/probe.c
+# Public numerical tests and the kernel-weight wrapper are included.
+
+# Only named release reports are public; all other local reports stay private.
+!/reports/
+/reports/*
+!/reports/GITHUB_REPRODUCIBILITY_REPAIR.md
+!/reports/REPRODUCTION_MATRIX.md
+!/reports/TEST_RESULTS.md
+!/reports/PUBLIC_RELEASE_CHECKLIST.md
 
 # Generated files never belong in source control.
 __pycache__/

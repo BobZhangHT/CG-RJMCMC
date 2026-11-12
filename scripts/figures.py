@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 import shutil
+from types import SimpleNamespace
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -604,6 +605,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=OUTPUT_ROOT)
     parser.add_argument("--figures", type=Path)
     parser.add_argument("--tables", type=Path)
+    parser.add_argument("--revision-results", type=Path, help="revision root with benchmark/ and small_sample/ for final table panels")
+    parser.add_argument("--runtime-repeats", type=Path, help="saved 31-repeat PELT timing CSV for final Table 5")
+    parser.add_argument("--application-input", type=Path, help="raw OSF directory, required to measure timings if no saved repeats supplied")
     return parser.parse_args()
 
 
@@ -626,6 +630,16 @@ def main() -> int:
         make_figure4(result, figures / "fig4_real_data.pdf")
         make_figure7(result, figures / "fig7_real_diagnostics.pdf")
         make_table5(rmse, tables / "table5_real_data.tex")
+    if args.revision_results is not None:
+        try:
+            from scripts import revision_tables
+        except ModuleNotFoundError:
+            import revision_tables
+        revision_tables.generate(SimpleNamespace(
+            simulation=[args.simulation.resolve()], application=args.application.resolve()/"results.json",
+            benchmark=args.revision_results.resolve()/"benchmark", small_sample=args.revision_results.resolve()/"small_sample",
+            output_root=output_root/"revision_tables", runtime_repeats=args.runtime_repeats,
+            timing=args.runtime_repeats is None, application_input=args.application_input, allow_partial=False))
     figure_manifest = export(
         figures,
         output_root / "submission_figures",
@@ -640,7 +654,7 @@ def main() -> int:
         figure_manifest,
     )
     print(
-        "Rebuilt four simulation figures, two PC-Flanker figures, five tables, and six submission TIFFs."
+        "Rebuilt six figures and original table layouts. Final revised Tables 2/3/5 are in revision_tables/ when --revision-results is supplied; otherwise run reproduce.py tables after revision validation."
     )
     return 0
 

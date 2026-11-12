@@ -1,5 +1,8 @@
 schema_version: 1
 namespace: R61-FORMAL-v1
+# D5 was generated in its own frozen namespace; preserve those original seeds.
+namespace_by_dgp:
+  D5: R61-D5-BALANCED-v1
 output_dir: results/reproduction/simulation
 
 # Formal study settings for the publication analysis.

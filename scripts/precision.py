@@ -52,6 +52,19 @@ KMAX = 4
 MINSEG = 8
 PRIOR_POWER = 1.0
 PRECISION_NAMESPACE = "PLOS-PRECISION-ORIGINAL-ALPHA1-v1"
+PRECISION_CASE_IDS = ("application_high_first", "application_low_first", "d5_rep_000001", "d5_rep_000002", "d5_rep_000003")
+
+
+def validate_precision_invocation(iterations: int, warmup: int, case_ids: Sequence[str] | None = None) -> tuple[str, ...]:
+    for name, value in (("iterations", iterations), ("warmup", warmup)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or not 0 <= value <= np.iinfo(np.int32).max:
+            raise ValueError(f"{name} must be a nonnegative C int")
+    if iterations <= warmup:
+        raise ValueError("iterations must exceed warmup")
+    selected = PRECISION_CASE_IDS if case_ids is None else tuple(case_ids)
+    if not selected or len(set(selected)) != len(selected) or any(case not in PRECISION_CASE_IDS for case in selected):
+        raise ValueError("case selection must contain unique supported case IDs")
+    return selected
 
 
 def _load_module(path: Path, name: str) -> Any:
@@ -181,7 +194,13 @@ class CWeightProbe:
         output = OUTPUT if output is None else output.expanduser().resolve()
         wrapper = ROOT / "scripts" / "probe.c"
         suffix = ".dll" if os.name == "nt" else ".so"
-        tag = sha256_file(ROOT / "scripts" / "kernel.c")[:12]
+        # Both translation-unit sources and build options define the cached ABI.
+        flags = ["-O3", *(["-fPIC"] if os.name != "nt" else []), "-shared"]
+        fingerprint = hashlib.sha256()
+        for source in (ROOT / "scripts" / "kernel.c", wrapper):
+            fingerprint.update(source.read_bytes())
+        fingerprint.update(repr((sys.platform, flags)).encode("ascii"))
+        tag = fingerprint.hexdigest()[:20]
         library_path = output / f"precision_weight_probe_{tag}{suffix}"
         output.mkdir(parents=True, exist_ok=True)
         if not library_path.exists():
@@ -189,10 +208,9 @@ class CWeightProbe:
             subprocess.run(
                 [
                     "gcc",
-                    "-O3",
-                    "-shared",
+                    *flags,
                     "-o",
-                    provenance_path(library_path),
+                    os.path.relpath(library_path, ROOT),
                     str(wrapper.relative_to(ROOT)),
                     "-lm",
                 ],
@@ -219,12 +237,29 @@ class CWeightProbe:
     def weight(
         self, H: np.ndarray, h: np.ndarray, yqy: float, n: int, cuts: tuple[int, ...]
     ) -> float:
+        H = np.ascontiguousarray(H, dtype=np.float64)
+        h = np.ascontiguousarray(h, dtype=np.float64)
+        if H.shape != (T, T) or h.shape != (T,):
+            raise ValueError("H must have shape (64, 64) and h shape (64,)")
+        if not np.isfinite(H).all() or not np.isfinite(h).all() or not math.isfinite(yqy):
+            raise ValueError("sufficient statistics must be finite")
+        if isinstance(n, (bool, np.bool_)) or not isinstance(n, (int, np.integer)) or not 0 <= n <= np.iinfo(np.int32).max:
+            raise ValueError("n must be a nonnegative C int")
+        cuts = tuple(cuts)
+        if len(cuts) > formal.MAX_K or any(
+            isinstance(cut, (bool, np.bool_)) or not isinstance(cut, (int, np.integer))
+            for cut in cuts
+        ):
+            raise ValueError("cuts must be integer partition boundaries")
+        edges = (0,) + cuts + (T,)
+        if any(b - a < MINSEG for a, b in zip(edges[:-1], edges[1:])):
+            raise ValueError("partition violates the minimum segment length")
         ca = np.zeros(formal.MAX_K, dtype=np.int32)
         ca[: len(cuts)] = cuts
         return float(
             self.lib.probe_weight(
-                np.ascontiguousarray(H).ctypes.data_as(ct.POINTER(ct.c_double)),
-                np.ascontiguousarray(h).ctypes.data_as(ct.POINTER(ct.c_double)),
+                H.ctypes.data_as(ct.POINTER(ct.c_double)),
+                h.ctypes.data_as(ct.POINTER(ct.c_double)),
                 float(yqy),
                 int(n),
                 ca.ctypes.data_as(ct.POINTER(ct.c_int)),
@@ -283,12 +318,26 @@ def mixture_quantiles(
     if locations.ndim == 1:
         locations = locations[:, None]
         scales = scales[:, None]
-    if not (len(weights) == len(locations) == len(scales)):
+    probabilities = np.asarray(probabilities, dtype=float)
+    if (weights.ndim != 1 or locations.ndim != 2 or scales.shape != locations.shape
+            or len(weights) == 0 or len(weights) != len(locations)):
         raise ValueError("mixture component dimensions disagree")
-    if np.any(scales <= 0) or not np.isclose(weights.sum(), 1.0):
+    if (not np.isfinite(weights).all() or not np.isfinite(locations).all()
+            or not np.isfinite(scales).all() or np.any(weights < 0)
+            or np.any(scales <= 0) or not np.isclose(weights.sum(), 1.0, rtol=0, atol=1e-12)
+            or not math.isfinite(df) or df <= 0):
         raise ValueError("invalid finite mixture")
-    spread = 16.0 * scales.max(axis=0)
-    lo0, hi0 = locations.min(axis=0) - spread, locations.max(axis=0) + spread
+    if (probabilities.ndim != 1 or not len(probabilities)
+            or not np.isfinite(probabilities).all()
+            or np.any((probabilities <= 0) | (probabilities >= 1))
+            or not isinstance(iterations, (int, np.integer)) or iterations < 1):
+        raise ValueError("invalid quantile probabilities or iteration count")
+    # Every component quantile brackets the mixture quantile, including heavy
+    # tails for which a fixed multiple of the largest scale is insufficient.
+    lower = stdtrit(df, float(probabilities.min()))
+    upper = stdtrit(df, float(probabilities.max()))
+    lo0 = (locations + scales * lower).min(axis=0)
+    hi0 = (locations + scales * upper).max(axis=0)
     result = []
     for probability in probabilities:
         lo, hi = lo0.copy(), hi0.copy()
@@ -366,6 +415,46 @@ def exact_posterior(
             [any(trial in state for state in states) for trial in range(1, T + 1)]
         ),
     }
+
+
+def run_smoke(output: Path | None = None) -> dict[str, Any]:
+    """Check a synthetic K<=1 mixture without application data or frozen runs."""
+    output = OUTPUT if output is None else output.expanduser().resolve()
+    rng = np.random.default_rng(20261112)
+    design = rng.normal(size=(80, T)) / 4.0
+    response = rng.normal(size=80)
+    H, h = design.T @ design, design.T @ response
+    yqy, n = float(response @ response), len(response)
+    states = legal_partitions(kmax=1)
+    probe = CWeightProbe(output)
+    exact = exact_posterior(H, h, yqy, n, states, probe)
+    errors = []
+    for probability, quantile in ((0.025, exact["q025"]), (0.975, exact["q975"])):
+        cdf = (exact["weights"][:, None] * stdtr(
+            exact["df"], (quantile[None, :] - exact["locations"]) / exact["scales"]
+        )).sum(axis=0)
+        errors.append(float(np.max(np.abs(cdf - probability))))
+    maximum_cdf_error = max(errors)
+    if maximum_cdf_error > 1e-10:
+        raise RuntimeError(f"synthetic mixture inversion failed: {maximum_cdf_error:g}")
+    result = {
+        "status": "passed",
+        "mode": "synthetic_smoke",
+        "manuscript_result": False,
+        "seed": 20261112,
+        "trials": T,
+        "observations": n,
+        "kmax": 1,
+        "minseg": MINSEG,
+        "partitions": len(states),
+        "max_c_python_logweight_error": exact["max_c_python_logweight_error"],
+        "max_mixture_cdf_error": maximum_cdf_error,
+        "source_sha256": {f"scripts/{name}": sha256_file(ROOT / "scripts" / name)
+                          for name in ("kernel.c", "probe.c", "precision.py")},
+        "versions": {"python": sys.version, "numpy": np.__version__},
+    }
+    write_json(output / "precision_smoke.json", result)
+    return result
 
 
 def replication_mcse(values: np.ndarray) -> float | None:
@@ -525,12 +614,16 @@ def summarize_frozen_simulations() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
 
 
 def prepare_cases(
-    cfg: dict[str, Any], application_input: Path = PC_INPUT
+    cfg: dict[str, Any], application_input: Path = PC_INPUT,
+    case_ids: Sequence[str] | None = None,
 ) -> list[dict[str, Any]]:
+    selected = set(PRECISION_CASE_IDS if case_ids is None else case_ids)
     pc = _load_module(PC_PATH, "r61_pc_precision_dependency")
     application_input = application_input.expanduser().resolve()
     cases: list[dict[str, Any]] = []
     for first_pc in ("High", "Low"):
+        if f"application_{first_pc.lower()}_first" not in selected:
+            continue
         train, _test, metadata = pc.prepare_group(application_input, first_pc)
         H, h, yqy = formal.collapsed(*train, int(metadata["participants"]))
         cases.append(
@@ -545,11 +638,15 @@ def prepare_cases(
                 "metadata": metadata,
             }
         )
+    if not any(case.startswith("d5_") for case in selected):
+        return cases
     resolved = json.loads(
         (SIMULATION_RESULTS / "resolved_config.json").read_text(encoding="utf-8")
     )["config"]
     base, _ = formal.load_frozen_geometry(ROOT / resolved["design"]["geometry_file"])
     for rep in (1, 2, 3):
+        if f"d5_rep_{rep:06d}" not in selected:
+            continue
         saved_path = (
             SIMULATION_RESULTS
             / "replicates"
@@ -567,14 +664,15 @@ def prepare_cases(
         if formal.sha256_array(y) != saved["data_hash"]:
             raise RuntimeError(f"D5 replicate {rep} data hash mismatch")
         label = f"{case['stage']}|{case['cell']}|R{rep:06d}"
+        namespace = formal.case_namespace(resolved, case)
         test_mask = formal.outcome_blind_holdout(
             design[0],
             design[1],
             resolved["design"]["holdout_trials_per_participant"],
-            f"{resolved['namespace']}|{label}",
+            f"{namespace}|{label}",
         )
         train_mask = formal.mcar_training_mask(
-            ~test_mask, resolved["namespace"], label, case["training_mcar"]
+            ~test_mask, namespace, label, case["training_mcar"]
         )
         if formal.sha256_array(np.packbits(train_mask)) != saved["training_mask_hash"]:
             raise RuntimeError(f"D5 replicate {rep} training-mask hash mismatch")
@@ -782,6 +880,7 @@ def run_precision_case(
     iterations: int = 15000,
     warmup: int = 2000,
 ) -> dict[str, Any]:
+    validate_precision_invocation(iterations, warmup, [case["case_id"]])
     case_dir = OUTPUT / "cases" / case["case_id"]
     case_dir.mkdir(parents=True, exist_ok=True)
     exact_started = time.perf_counter()
@@ -1155,13 +1254,17 @@ def make_results_md(
         )
     probability_pass = all(row["probability_threshold_pass"] for row in summaries)
     endpoint_pass = all(row["endpoint_threshold_pass"] for row in summaries)
+    original_budget = all(row["iterations_per_chain"] == 15000 and row["warmup_per_chain"] == 2000 for row in summaries)
     extension_sentence = (
         "Consequently, the conditional 100,000-iteration extension was not invoked."
         if probability_pass and endpoint_pass
         else "At least one original-budget threshold was not met; the discrepancy and quantile MCSE are retained explicitly, and no automatic selective extension was performed."
     )
+    if not original_budget:
+        extension_sentence = "An explicit non-original chain budget was requested; these outcomes describe that invocation."
     lines += [
         "",
+        "Chain budgets (iterations/warmup): " + "; ".join(f"{row['case_id']}: {row['iterations_per_chain']}/{row['warmup_per_chain']}" for row in summaries) + ".",
         f"All five cases passed the prespecified maximum absolute probability-error threshold: **{probability_pass}**. All five passed the maximum absolute 95% endpoint-error threshold: **{endpoint_pass}**. {extension_sentence}",
         "",
         "All 64 trajectory coordinates received rank-normalized split R-hat, bulk ESS, tail ESS, and quantile-MCSE checks. K, each P(K=k) indicator, and every boundary indicator received discrete diagnostics and mean MCSE where sampled variation existed. Structurally impossible boundary indicators were recorded as N/A only after exact enumeration certified posterior probability zero. A sampled all-zero indicator with nonzero exact probability was not assigned a fictitious ESS.",
@@ -1179,7 +1282,7 @@ def make_results_md(
         "- `frozen_pointwise_coverage.csv`: 384 DGP-by-position rows.",
         "- `frozen_coverage_summary.csv`: all/near/far/simultaneous summaries with correct replication denominators.",
         "- `paired_rmse_differences.csv`: 60 DGP-by-method-pair rows.",
-        "- `cases/*/full_three_chain_trajectories_and_cuts.npz`: complete retained original-budget draws.",
+        "- `cases/*/full_three_chain_trajectories_and_cuts.npz`: complete retained draws with the invocation budget stored in each file.",
         "- `cases/*/trajectory_diagnostics.csv`, `discrete_diagnostics.csv`, and `top_partition_stability.csv`: reported-quantity precision evidence.",
         "- `precision_manifest.json`: hashes, software versions, protocol, and case outcomes.",
         "",
@@ -1379,7 +1482,14 @@ def refresh_coverage_table_from_machine_summary() -> None:
     )
 
 
-def run_all(application_input: Path = PC_INPUT) -> None:
+def run_all(application_input: Path = PC_INPUT, iterations: int = 15000,
+            warmup: int = 2000, case_ids: Sequence[str] | None = None) -> None:
+    selected = validate_precision_invocation(iterations, warmup, case_ids)
+    # Refuse before compiling, creating folders or writing any analysis output.
+    if OUTPUT.exists() and (not OUTPUT.is_dir() or any(OUTPUT.iterdir())):
+        raise FileExistsError(f"precision output must be empty; choose a fresh --output: {OUTPUT}")
+    full_scope = set(selected) == set(PRECISION_CASE_IDS)
+    original_budget = iterations == 15000 and warmup == 2000
     if not PROTOCOL.exists():
         raise RuntimeError(
             "precommitted protocol is missing; it must exist before running"
@@ -1389,22 +1499,16 @@ def run_all(application_input: Path = PC_INPUT) -> None:
     states = legal_partitions()
     if len(states) != 27931 or len(set(states)) != len(states):
         raise RuntimeError(f"legal partition contract failed: {len(states)}")
-    pointwise, strata, paired = summarize_frozen_simulations()
+    if full_scope:
+        pointwise, strata, paired = summarize_frozen_simulations()
     library, kernel_hash = formal.compile_kernel(ROOT / "build" / "r61_formal")
     if kernel_hash != sources["scripts/kernel.c"]:
         raise RuntimeError("compiled formal-kernel source hash mismatch")
     probe = CWeightProbe()
-    summaries = [
-        run_precision_case(case, states, probe, library)
-        for case in prepare_cases(
-            json.loads(
-                (SIMULATION_RESULTS / "resolved_config.json").read_text(
-                    encoding="utf-8"
-                )
-            )["config"],
-            application_input,
-        )
-    ]
+    cfg = json.loads((SIMULATION_RESULTS / "resolved_config.json").read_text(encoding="utf-8"))["config"]
+    cases = (prepare_cases(cfg, application_input) if case_ids is None
+             else prepare_cases(cfg, application_input, selected))
+    summaries = [run_precision_case(case, states, probe, library, iterations, warmup) for case in cases]
     extension_needed = [
         row["case_id"]
         for row in summaries
@@ -1413,17 +1517,28 @@ def run_all(application_input: Path = PC_INPUT) -> None:
     # The protocol permits, but does not mandate, a fresh 100k run. Keep the
     # decision explicit rather than silently lengthening only unfavorable cases.
     extension = {
-        "invoked": False,
-        "cases_failing_original_budget_threshold": extension_needed,
-        "reason": "not needed"
-        if not extension_needed
-        else "not automatically invoked; original-budget errors and MCSE are reported for audit",
+        "invoked": not original_budget,
+        "iterations_per_chain": iterations,
+        "warmup_per_chain": warmup,
+        "cases_failing_threshold": extension_needed,
+        "reason": "explicit user-selected budget" if not original_budget else
+                  "original budget; extensions are never automatically selected",
+        "original_budget": original_budget,
     }
-    make_assets(strata, paired, summaries)
-    make_results_md(strata, paired, summaries, sources)
-    conditional_rows = application_conditional_interval_check(application_input)
-    add_conditional_check_to_results(conditional_rows)
-    refresh_coverage_table_from_machine_summary()
+    if full_scope:
+        make_assets(strata, paired, summaries)
+        make_results_md(strata, paired, summaries, sources)
+        conditional_rows = application_conditional_interval_check(application_input)
+        add_conditional_check_to_results(conditional_rows)
+        refresh_coverage_table_from_machine_summary()
+    else:
+        conditional_rows = []
+        lines = ["# Selected posterior precision checks", "",
+                 f"Cases: {', '.join(selected)}.",
+                 f"Iterations per chain: {iterations}; warmup: {warmup}.",
+                 "This invocation evaluates only the selected cases. Frozen simulation coverage and application conditional checks were not rerun.", ""]
+        lines.extend(f"- {row['case_id']}: probability threshold={row['probability_threshold_pass']}; endpoint threshold={row['endpoint_threshold_pass']}" for row in summaries)
+        (OUTPUT / "RESULTS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     generated = sorted(
         path
         for path in OUTPUT.rglob("*")
@@ -1431,6 +1546,10 @@ def run_all(application_input: Path = PC_INPUT) -> None:
     )
     manifest = {
         "schema_version": 1,
+        "invocation": {"selected_cases": list(selected), "full_five_case_scope": full_scope,
+                       "iterations_per_chain": iterations, "warmup_per_chain": warmup,
+                       "original_budget": original_budget,
+                       "frozen_simulation_summary_rerun": full_scope},
         "protocol": str(PROTOCOL.relative_to(ROOT)),
         "protocol_sha256": protocol_hash,
         "source_lock": str(SOURCE_LOCK.relative_to(ROOT)),
@@ -1448,7 +1567,7 @@ def run_all(application_input: Path = PC_INPUT) -> None:
                 for row in conditional_rows
             ),
             "definition": conditional_rows[0]["definition"],
-        },
+        } if conditional_rows else {"status": "not_executed_selected_case_scope"},
         "software": {
             "python": sys.version,
             "numpy": np.__version__,
@@ -1522,10 +1641,13 @@ def finalize_provenance(
     print(json.dumps(manifest["analysis_source_hashes"], indent=2))
 
 
-if __name__ == "__main__":
+def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--run", action="store_true", help="execute the prespecified audit"
+    )
+    parser.add_argument(
+        "--smoke", action="store_true", help="run a synthetic K<=1 numerical check without external data"
     )
     parser.add_argument(
         "--finalize-provenance",
@@ -1564,17 +1686,32 @@ if __name__ == "__main__":
         default=Path(os.environ.get("R61_PC_FLANKER_INPUT", str(PC_INPUT))),
         help="extracted RawData_Experiment1 directory (or set R61_PC_FLANKER_INPUT)",
     )
-    args = parser.parse_args()
+    parser.add_argument("--iterations", type=int, default=15000, help="iterations per precision chain (default 15000)")
+    parser.add_argument("--warmup", type=int, default=2000, help="discarded warmup per chain (default 2000)")
+    parser.add_argument("--case", action="append", choices=PRECISION_CASE_IDS, dest="case_ids", help="repeat to select precision cases (default all five)")
+    args = parser.parse_args(argv)
+    try:
+        validate_precision_invocation(args.iterations, args.warmup, args.case_ids)
+    except ValueError as error:
+        parser.error(str(error))
+    if not args.run and (args.iterations != 15000 or args.warmup != 2000 or args.case_ids is not None):
+        parser.error("--iterations, --warmup and --case require --run")
     configure_paths(
         args.simulation_results, args.application_results, args.output, args.assets
     )
-    if args.run == args.finalize_provenance:
-        parser.error("choose exactly one of --run or --finalize-provenance")
+    if sum((args.run, args.smoke, args.finalize_provenance)) != 1:
+        parser.error("choose exactly one of --run, --smoke or --finalize-provenance")
     if args.rewrite_historical_manifest and not args.finalize_provenance:
         parser.error("--rewrite-historical-manifest requires --finalize-provenance")
-    if args.finalize_provenance:
+    if args.smoke:
+        print(json.dumps(run_smoke(), indent=2))
+    elif args.finalize_provenance:
         finalize_provenance(
             args.application_input, rewrite_historical=args.rewrite_historical_manifest
         )
     else:
-        run_all(args.application_input)
+        run_all(args.application_input, args.iterations, args.warmup, args.case_ids)
+
+
+if __name__ == "__main__":
+    main()
