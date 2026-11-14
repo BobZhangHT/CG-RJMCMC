@@ -82,6 +82,9 @@ PUBLIC_IMPORT_MODULES = (
     "scripts.constrained_dp_validation",
     "scripts.exact_d5_500",
     "scripts.revision_tables",
+    "scripts.coverage_diagnostic",
+    "scripts.calibration_sensitivity",
+    "scripts.residual_sensitivity",
 )
 
 
@@ -187,3 +190,13 @@ def test_validated_n35_cache_is_available_to_fresh_benchmark(tmp_path,capsys):
     reproduce.main(["benchmark","--dry-run","--small-sample-cache",str(cache),"--output-root",str(tmp_path/"new")])
     text=capsys.readouterr().out
     assert "--small-sample-root "+str(cache) in text
+
+
+def test_table_residual_results_forwarded_without_fitting(tmp_path, capsys):
+    residual = tmp_path / "residual"
+    reproduce.main(["tables", "--dry-run", "--residual-results", str(residual),
+                    "--output-root", str(tmp_path / "out")])
+    text = capsys.readouterr().out
+    assert "--residual-results " + str(residual) in text
+    assert "residual_sensitivity.py" not in text
+    assert not residual.exists()

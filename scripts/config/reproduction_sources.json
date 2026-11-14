@@ -7,30 +7,38 @@
     ".gitignore": "89c1637370d92de7db08f59119e8ad4d8b338fc8bddfe754dfdf507f9c8001c0",
     "CITATION.cff": "7e1dbd2b1d8dbaa84c611bb3d31473068e39d532a7078f4b997561e1db0661d7",
     "LICENSE": "69523503bf63cedbb90d309b3ccba6eff2511b1af426f614378b3baf403b66cf",
-    "README.md": "aced75e024b4972535114ec76dbb4fb0a3fab4010b2c8fec81d447c2c91d6ed4",
+    "README.md": "8e81693f5e67f77f62b823102ca8d7bc5cafff133776cd2f9ec36dd3d7c14fd0",
     "pyproject.toml": "348d6ee6138d1be62156c965458c03388cf916a390e4718edfc4a991771851b0",
     "scripts/application.py": "1811e3025d1129dac276a85728b8337f4878dfed4bd0c900c0fa3e65413a410c",
+    "scripts/calibration_sensitivity.py": "9de7534b86ba78f65e9b0e30e5b6e66f8dbd46b210a56f10d07a6b382e9d9ee4",
     "scripts/checks.py": "43b4fdfbed8c0c1897538cc0b224d8013b730cd7f6981bd0f2b2822955d6ea87",
     "scripts/config/application_protocol.md": "d152197e932a735c854d9c727c4689dae9260f5ce6b9735a04ebdd5a3a21fcd7",
+    "scripts/config/calibration_sensitivity_protocol.json": "59039f40c89ecb21a9cce7b9ad6e2ff714f1c32fd7aa43ff6e12c53a201d4f22",
     "scripts/config/original_precision_protocol.json": "f343d399a5694d823973f858286e75290a106695b1185a788551d14506623211",
     "scripts/config/publication_captions.json": "a1dbb77a1c7f19a5fcbc1833508419757a95eb0f0c287036ed41b4990ebb18eb",
     "scripts/config/r61_congruency_geometry.csv": "ae7137b158e4f9dc1eda6ae8ed6f8a68496dd00fac181a581b39a4e1cdcc4cc4",
     "scripts/config/r61_formal.yaml": "c61d7319aff8a5d2976e0a409d306c0a8e9de731c7aeb4dcf54977e5e2a4706e",
+    "scripts/config/residual_sensitivity_protocol.json": "eada9833fb1e8438c352cba521da291ed05348e6528219b242bdf8cbede167ff",
     "scripts/constrained_dp_validation.py": "c051ffe6a257b0715eeb1a599aeb2a725a0b14fc2795ae31fcb6d3bb0bf9c991",
+    "scripts/coverage_diagnostic.py": "fb0dc7a04dd60c1f3e3870b3d68d76a2f691538926a3c19d19a66e8d15c722b1",
     "scripts/exact_d5_500.py": "ecdc54c8958a5412c7b91c9fe409673263cead4fa54ca6d32f4903d6b580bf6f",
     "scripts/figures.py": "2bead2b5db70dcd3f112dfa498f40ae4b4da346b4df3be713d1bb2c0e35c490e",
     "scripts/kernel.c": "d36e15cb174012078649b489a361a71278b0fbec14cb717dc244bd9ab94a6171",
     "scripts/package.py": "189150f91a00b91b64278155f374fff08914ad0b62e88620f42a01c6a983c0c1",
     "scripts/precision.py": "629aa907ac56bc9bd485834bcb09b795bc1a1370d50cde680c1f84db2c250359",
     "scripts/probe.c": "9ef41b4fa4f01a7ea49fed3ea48d2e3bd2fd3bfc3fbb34413a4d7f82ae6997dd",
-    "scripts/reproduce.py": "0311ef0553858b0e5da4a1ed2833d400e94f752d2b7360be9247e5e448212208",
-    "scripts/revision_tables.py": "644cba5ab087e86666d26d45dc65435dbbbbdf4fc4e2bb60a95acd39b239e255",
+    "scripts/reproduce.py": "cd47adf999c3e36e3613c12cef6ffab55bfae199812b187330362c64db38d1e9",
+    "scripts/residual_sensitivity.py": "dce15a8bb203060d99db5a51395b1479b8ac1ddf100ae14a63754dff8cf91ad3",
+    "scripts/residual_step.c": "9d1b46bfc36f34674b73f53cf5053a7048415f31ddf6a9acce7ee9eabd641c28",
+    "scripts/revision_tables.py": "c5cd5728373e824b17deba6fdd054ff621f3afc9e29c6914b77ef53c9eccef5c",
     "scripts/simulation.py": "297dc5df8767364a0ad94c509c804223f62f9f8c46a4284b0247754b1b52a9f1",
     "scripts/simulation_figures.py": "7081a9c86a74b4ff84a6348ed5c3711711c01ba36dadcb619cd095f294696a3a",
     "scripts/small_sample_validation.py": "396bb5e6c1ece27b36be43815720ceb006428226a577f24e2b196a7c393693ff",
     "scripts/tests/fixtures/pelt_counterexamples.json": "ff5868024fa3eace7923d4a4e7465154115bea9ae2829e8b5ec6f7627e22b1ba",
+    "scripts/tests/test_calibration_sensitivity.py": "67cc2da1306fe9946117ff0ef21400f38bb35318192d01b99e26408580344f5f",
     "scripts/tests/test_checks.py": "21434ead1286ae7c1cb8241889e695f750714e319ae9993a45809247b12b063c",
     "scripts/tests/test_constrained_dp_validation.py": "ad70591111a308c9cd0a56eeafb015f1b12834be7f2020245d00cd20dbe42aef",
+    "scripts/tests/test_coverage_diagnostic.py": "7d07dbffd69c9544e817e78b05ec52adc4d74e3cc93282659a9d2b234caa40e2",
     "scripts/tests/test_exact_d5_500.py": "f9aab70c248ee644b860ae5bd80319ddcb503ab88241282d62fcff5858aaa92a",
     "scripts/tests/test_figures.py": "be9a522f9a3d33e26e3d7ea400a5c90a5fd6a6eee37d778df13991ef7490b511",
     "scripts/tests/test_kernel.py": "f31466b382a685f77763ee37d1c10eabbce3d5cd19864d94326f6ca47137dd67",
@@ -39,8 +47,9 @@
     "scripts/tests/test_package.py": "d56d45847f5570c7da408276f22dca77d09ea932163b932c9cbead77ee2b77dc",
     "scripts/tests/test_pelt_delayed_pruning.py": "a642570379bd5d10d57978f6e4d405f6fb590d52befcf556e7966f79f25e95c2",
     "scripts/tests/test_precision.py": "32ea5ea74ab3283a76f1d68077003ed8a96536de551eebf7aae1209d6a89e9f6",
-    "scripts/tests/test_reproduce.py": "1e37c0500ae509b5fbcadbd3eb09287578aa73c4be64aaf75ab128c3364d2a0b",
-    "scripts/tests/test_revision_tables.py": "de9c1ab6be05847e624338d2593ee84f53ed2b0429b88dfc308d96585cc20855",
+    "scripts/tests/test_reproduce.py": "318200679e5351325a9b2ad45a5bf53fda69d70af714a43053b64b2c212bc9af",
+    "scripts/tests/test_residual_sensitivity.py": "72f3ee507a2f1b7b81b7f3eaf43bb275a54612defabf46202252d9b0a8a1217c",
+    "scripts/tests/test_revision_tables.py": "c8406118f783434d04184a4ac9384d942f35c3ed00b5f6b15f4f8a0e8b349692",
     "scripts/tests/test_seed_namespaces.py": "b04e2fa73f3eb39adb0197272e4ceb9fb4015a91c35d8d440416fcbe4c4b2ba7",
     "scripts/tests/test_simulation.py": "7ed0505ab4015cc60274adfdc325dd30b5bd0cc84debde5af796676133e2baf9",
     "scripts/tests/test_small_sample_validation.py": "a1170aee206e06d28a469a19944da44831163768e100a337765dd775b640cefc"
@@ -66,5 +75,34 @@
       }
     }
   ],
-  "not_locked": "Generated results, runtime binaries, private inputs and evolving execution reports are excluded; never reinterpret their provenance as current-source outputs."
+  "not_locked": "Generated results, runtime binaries, private inputs and evolving execution reports are excluded; never reinterpret their provenance as current-source outputs.",
+  "execution_history": [
+    {
+      "date": "2026-11-14",
+      "analysis": "D5 phase-prior and known-partition diagnostic",
+      "executed_source_sha256": "3a72a8f05bc8c38703efa6a81631c963b8ce5b4ebb0bc4bd84132442f733f91d",
+      "subsequent_correction": "Canonicalize protocol method container as a list so JSON round-trip identities compare equal; numerical computation is unchanged.",
+      "numerical_functions_AST_unchanged": true
+    },
+    {
+      "date": "2026-11-14",
+      "study": "Residual sensitivity",
+      "runner_sha256": "d4e6d480ede589140ce982dbf30784fc0dff8e29f32d7c1acb72a8c1f8df0a32",
+      "original_protocol_sha256": "8f97a6eb00e1702c41501d44c20a4970775f34cc4a290e83641bf4329b28d672",
+      "maintenance": "Public protocol now documents the later diagnostic-only High independent t4 extension to60000; original execution provenance is retained unchanged."
+    },
+    {
+      "date": "2026-11-14",
+      "study": "Sample-size and individual-timing calibration",
+      "runner_sha256": "9de7534b86ba78f65e9b0e30e5b6e66f8dbd46b210a56f10d07a6b382e9d9ee4",
+      "protocol_sha256": "59039f40c89ecb21a9cce7b9ad6e2ff714f1c32fd7aa43ff6e12c53a201d4f22",
+      "scope": "All 500 paired replications completed; transient memory failures resumed with unchanged scientific identity and reduced concurrency."
+    },
+    {
+      "date": "2026-11-14",
+      "study": "Residual sensitivity public CLI maintenance",
+      "executed_runner_sha256": "d4e6d480ede589140ce982dbf30784fc0dff8e29f32d7c1acb72a8c1f8df0a32",
+      "maintenance": "Add optional Student-condition CLI selector and testable argument parsing; default model grid and numerical algorithms unchanged. This permits the documented High t4-IID-only 60000 extension without rerunning other conditions."
+    }
+  ]
 }

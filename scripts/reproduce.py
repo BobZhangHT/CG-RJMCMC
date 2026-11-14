@@ -77,6 +77,7 @@ def plan(args: argparse.Namespace) -> list[list[str]]:
                      "--small-sample", small, "--output-root", assets / "revision_tables"]
     if balanced is not None:
         table_options.extend(("--simulation", balanced / "main"))
+    add_option(table_options, "--residual-results", getattr(args, "residual_results", None))
     repeats = getattr(args, "runtime_repeats", None)
     if repeats is not None:
         table_options.extend(("--runtime-repeats", repeats))
@@ -258,10 +259,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exact-cache", type=Path, help="read-only all500 exact cache; verify and reaggregate, not new CDF inversion")
     parser.add_argument("--design-input", type=Path, help="optional frozen application-derived layout NPZ for N35")
     parser.add_argument("--runtime-repeats", type=Path, help="saved 31-repeat-per-group PELT timing CSV; otherwise tables measures new timings")
+    parser.add_argument("--residual-results", type=Path, help="completed residual-sensitivity result root for Table 5 Panel B; no new fits")
     args = parser.parse_args(argv)
     if args.stage == "test" and not (ROOT / "scripts/tests").is_dir():
         parser.error("public tests are missing; obtain a complete source checkout")
-    for name in ("output_root", "assets", "application_input", "simulation_results", "application_results", "balanced_d5_root", "small_sample_cache", "benchmark_cache", "exact_cache", "design_input", "runtime_repeats"):
+    for name in ("output_root", "assets", "application_input", "simulation_results", "application_results", "balanced_d5_root", "small_sample_cache", "benchmark_cache", "exact_cache", "design_input", "runtime_repeats", "residual_results"):
         value = getattr(args, name)
         if value is not None:
             setattr(args, name, value.resolve())

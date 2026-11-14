@@ -14,7 +14,7 @@ Run from repository root after installation. RAW means the50 CSV files extracted
 | Six figures | scripts/figures.py, scripts/simulation_figures.py | simulation/application outputs | `python scripts/reproduce.py figures` | reproduced figures and separate TIFFs |
 | Final Tables2/3/5 | scripts/revision_tables.py | simulation, benchmark, N35, application; RAW for timing | `python scripts/reproduce.py tables --application-input data/external/RawData_Experiment1` | manuscript/reproduced/revision_tables/*.tex/csv/md |
 | Synthetic integration | precision/small_sample/DP/exact | no participant data | `python scripts/reproduce.py revision-smoke --workers 2` | explicitly non-manuscript smoke outputs |
-| Full defined revision | orchestration above | RAW, primary/application outputs | `python scripts/reproduce.py revision --workers 8 --application-input data/external/RawData_Experiment1` | all revision stages and final panels |
+| Original defined revision | orchestration above | RAW, primary/application outputs | `python scripts/reproduce.py revision --workers 8 --application-input data/external/RawData_Experiment1` | all revision stages and final panels |
 
 ## Cached-input routes
 
@@ -27,3 +27,16 @@ No rows in this matrix alone certify execution. Actual statuses are in TEST_RESU
 The cached-input `revision` command completed N35 identity validation, independent5600+2 objective recomputation,500-case exact-cache verification/reaggregation and final table generation with exit0. It did not run new formal chains or invert all500 CDFs. The fresh source-only directory installed declared dependencies and passed source validation and pure DP/mixture smoke. Native host-policy failures and exact final test counts are documented separately in TEST_RESULTS.md.
 
 The final source-only public package needs no private Python modules. Archived caches are optional read-only inputs; users can generate inputs through the public fresh path after obtaining the original OSF records. Source-lock history and protocol files preserve their historical identity; current-source integrity alone is not numerical acceptance.
+
+## Additional targeted diagnostics (14 November)
+
+These stages are explicitly run after their prerequisite outputs exist; neither `revision` nor `all --include-revision` launches them automatically. Full commands are in README.md.
+
+| Result | Public entry | Required inputs | Output |
+|---|---|---|---|
+| D5 phase-prior / known-partition coverage | `coverage_diagnostic.py --full500` | original simulation outputs, D5 benchmark statistics/records, certified exact-D5 archive | six-condition coverage/width/structure summaries, paired contrasts and endpoint certificates |
+| D5 sample size / individual timing | `calibration_sensitivity.py --full500` | preceding diagnostic plus original simulation and D5 statistics/records | 500 paired replications, six new fit cells, boundary-distance diagnostics and paired contrasts |
+| Application residual alternatives | `residual_sensitivity.py --mode exact` and `--mode student --engine uniform` | public OSF Experiment 1 records | six specifications in each group, phase contrasts, intervals, structure and chain diagnostics |
+| Table 5 Panel B | `revision_tables.py --residual-results ROOT` or `reproduce.py tables --residual-results ROOT` | completed exact and Student sensitivity outputs below ROOT | residual CSV/Markdown and combined Table 5 TeX, alongside unchanged Panel A |
+
+The Student command performs protocol-triggered diagnostic escalation. The high-first independent Student4 case additionally used a documented 60,000-iteration extension in a separate output directory. The table reader selects final qualified runs and does not pool overlapping iterations. No private Python module or manuscript constant supplies these cells. Outputs themselves are generated locally and are not redistributed with the source.

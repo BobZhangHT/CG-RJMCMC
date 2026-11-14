@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "date": "2026-11-14",
+  "namespace": "PLOS-CALIBRATION-SENSITIVITY-20261114",
+  "replications": 500,
+  "conditions": ["N1000_shared", "N2000_shared", "N500_jitter2"],
+  "baseline": "Unchanged original D5 N500 shared data and exact original-prior unknown/oracle results",
+  "cuts": [13, 25, 39, 51],
+  "levels": [0.13125, 0.03125, 0.13125, 0.03125, 0.13125],
+  "priors": {"nuisance_covariance_sigma_units": "diag(4,1,I_N)", "phase_precision": 4, "inverse_gamma_shape": 3, "inverse_gamma_rate": 2, "count_prior": "1/K!", "conditional_partition_prior": "uniform legal", "Kmax": 4, "minimum_segment": 8},
+  "extension": {"participants": 1500, "global_ids": [500, 1999], "nested_prefix_N1000": 500, "participant_sd": 0.4, "residual_sd": 0.4, "beta0": 0.0, "beta1": 0.05, "holdout_per_person": 13, "streams": ["extension_intercepts", "extension_errors", "extension_holdout"]},
+  "jitter": {"offsets": [-2, -1, 0, 1, 2], "count_per_offset": 100, "one_offset_for_all_person_boundaries": true, "stream": "jitter_permutation", "construction": "y_jitter=y_base+c*(individual_truth-base_truth); same original intercepts, errors, designs and masks", "target": "unweighted participant-average curve over all 500 defined individual curves"},
+  "oracle": "Known individual phase assignments with five common effects; full-covariance G Ainv G' intervals; no free individual effect levels",
+  "numerical": {"partitions": 27931, "quantiles": [0.025, 0.975], "active_omitted_mass_max": 1e-15, "active_weights_renormalized": false, "coarse_bracket_mass": 0.0001, "location_tolerance": 1e-8, "strict_cdf_margin": 1e-13, "cdf_residual_max": 1e-8, "numerical_cdf_pad": 2e-14, "brent_xtol": 1e-12, "brent_rtol": 1e-14, "independent_full_CDF_replications": [1, 250, 500], "ambiguous_coverage": "Full CDF at truth when within location tolerance of endpoint or active truth bounds straddle a threshold; unresolved floating ties block completion"},
+  "strata": ["all", "near", "far", "distance0", "distance1", "distance2", "distance_ge3"],
+  "distance": "Absolute bin distance to nominal cuts; near <=2 contains 20 positions and far contains 44. For jitter these are nominal transition centers, not the population micro-boundaries.",
+  "metrics": ["coverage", "width", "signed_bias", "RMSE", "miscoverage_below", "miscoverage_above"],
+  "RMSE": "sqrt(mean replication-by-position squared error); delta-method MCSE and paired contrast influence differences, not independent-bin inference",
+  "paired_contrasts": ["N1000-N500 shared", "N2000-N500 shared", "N2000-N1000 shared", "jitter-baseline for working and oracle using their own truths", "oracle-working within every condition", "near-far within every condition/method"],
+  "interpretation": "Separate interventions, not an additive causal attribution. Shared-boundary violation cannot explain original shared-truth D5 undercoverage. Jitter oracle supplies individual timing information and a richer population mean representation. Report all conditions without outcome-based selection.",
+  "freeze": "Bind this protocol, all software/input versions and original/baseline hashes before solving any new dataset. Pilot and formal identities are distinct; no incomplete or unresolved replication can enter the 500-case aggregate."
+}

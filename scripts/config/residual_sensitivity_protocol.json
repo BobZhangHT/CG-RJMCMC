@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-14",
+  "reason": "Directly test dependence of empirical phase contrasts and partition support on the residual assumptions in R3.M4.",
+  "data": "Same original application participants, preprocessing and training split via checks.prepare_group",
+  "groups": {
+    "High": {
+      "participants": 24,
+      "training_responses": 6698
+    },
+    "Low": {
+      "participants": 21,
+      "training_responses": 5937
+    }
+  },
+  "conditions": [
+    {
+      "name": "Gaussian independent",
+      "family": "Gaussian",
+      "correlation": 0.0
+    },
+    {
+      "name": "Student independent, four degrees of freedom",
+      "family": "Student innovations",
+      "degrees_of_freedom": 4,
+      "correlation": 0.0
+    },
+    {
+      "name": "Student independent, eight degrees of freedom",
+      "family": "Student innovations",
+      "degrees_of_freedom": 8,
+      "correlation": 0.0
+    },
+    {
+      "name": "Gaussian first-order autoregressive, correlation0.2",
+      "family": "Gaussian",
+      "correlation": 0.2
+    },
+    {
+      "name": "Gaussian first-order autoregressive, correlation0.4",
+      "family": "Gaussian",
+      "correlation": 0.4
+    },
+    {
+      "name": "Student innovations4 with first-order autoregressive working correlation0.2",
+      "family": "Student innovations",
+      "degrees_of_freedom": 4,
+      "correlation": 0.2
+    }
+  ],
+  "fixed": [
+    "all original observations and training masks",
+    "original nuisance and phase-effect priors scaled by residual variance",
+    "IG(3,2)",
+    "factorial count prior and conditional uniform legal partitions",
+    "Kmax4",
+    "minimum phase length8"
+  ],
+  "residual_variance": "sigma2 has the same marginal-variance interpretation in every condition; Student variance factor c=(df-2)/df and latent precision w/c.",
+  "dependence": "Within participant and retained block only; working correlation is coefficient raised to native trial distance, stationary first observation. All response and design columns are whitened.",
+  "combined_scope": "Independent Student innovations after fixed Gaussian-AR whitening define a proper observed-record working model with covariance sigma2 R; original residual marginals generally are not Student distributions.",
+  "sampler": "Partially collapsed Gibbs: M,sigma2,delta conditional on weights with nuisance integrated; random nuisance reconstruction; weights conditional on whitened residuals. Recalculate current partition logweight after every weight update.",
+  "Gaussian_computation": "Exact finite posterior over all27931 partitions; phase-contrast CDF includes K0 point mass atzero.",
+  "Student_computation": {
+    "chains": 3,
+    "iterations_per_chain": 15000,
+    "warmup": 2000,
+    "initial_counts": [
+      0,
+      2,
+      4
+    ],
+    "seed_namespace": "PLOS-RESIDUAL-SENSITIVITY-20261114",
+    "diagnostic_escalation": "Only if maximum monitored Rhat>1.01, minimum nondegenerate bulk/tail ESS<1500, or phase-contrast quantile MCSE>0.002, extend or rerun to30000 iterations under the same fixed seeds and model; report actual warmup and retained counts and do not double-count overlapping draws.",
+    "documented_diagnostic_extension": {
+      "condition": "High group, independent Student-t errors with4 degrees of freedom",
+      "trigger": "At30000 iterations PIP12 bulk/tail ESS1402.05, below1500; remaining criteria passed.",
+      "iterations_per_chain": 60000,
+      "warmup": 2000,
+      "same_model_data_seeds": true,
+      "combination": "Use extended run alone, not pooled with earlier overlapping draws.",
+      "timing": "Documented after original protocol and before extension; frozen original protocol retained in study provenance."
+    }
+  },
+  "metrics": [
+    "mean effect overbins33-64 minusmean overbins1-32 and95%posterior interval",
+    "boundary inclusion probability atbin32",
+    "high-first early boundary probability atbin12",
+    "joint MAP partition and change-count posterior",
+    "chain diagnostics and endpoint MCSE where sampled"
+  ],
+  "acceptance": [
+    "Gaussian independent statistics match original application",
+    "weighted statistics match independent full-design calculation",
+    "persistent C bridge matches unchanged original kernel",
+    "fixed-partition Student sampler checked independently",
+    "combined model reduces to independent Student atzero correlation and to GaussianAR with frozen weightsw=c"
+  ],
+  "interpretation": "Report every condition irrespective of direction; no claim that symmetric Student tails resolve skewness or that finite-grid sensitivity establishes general frequentist coverage. No model is selected using the desired result."
+}

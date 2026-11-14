@@ -51,7 +51,7 @@ def emit(out,name,rows):
     tex=[r'\begin{tabular}{'+'l'*len(fields)+'}',r'\hline',' & '.join(esc(k) for k in fields)+r' \\']+[' & '.join(esc(r.get(k)) for k in fields)+r' \\' for r in rows]+[r'\hline',r'\end{tabular}']
     (out/(name+'.tex')).write_text('\n'.join(tex)+'\n',encoding='utf8')
 
-def manuscript_tables(out,agg,small,coverage,application):
+def manuscript_tables(out,agg,small,coverage,application,residual=None):
     """Compact, insertion-ready panels, with rounding applied only at rendering."""
     display={'B0':'NoEffect','B1':'ConstEffect','B2':'FixedSplit','A3':'CG-RJMCMC','Constrained DP-BIC':'DP-BIC'}
     def write(name,columns,rows):
@@ -84,6 +84,126 @@ def manuscript_tables(out,agg,small,coverage,application):
         repeated=r['method']=='PELT-BIC';value=r.get('median_seconds') if repeated else r.get('runtime_seconds');cuts=r.get('cuts',[])
         rows.append([r['group'],r['method'],f"{r['test_RMSE']:.5f}",r.get('K'),', '.join(map(str,cuts)) or '--',f'{value:.6f}' if value is not None else '--',f"[{r['q25_seconds']:.5f}, {r['q75_seconds']:.5f}]" if repeated else '--'])
     write('table5.tex','llrrlrr',rows)
+    if residual is not None:
+        write('table5_panel_a.tex','llrrlrr',rows)
+        a=(out/'table5.tex').read_text(encoding='utf8')
+        b=residual_table_tex(residual)
+        (out/'table5_panel_b.tex').write_text(b,encoding='utf8')
+        (out/'table5.tex').write_text('Panel A: Prediction, structure, and time\n'+a+'\n\\par\\medskip\nPanel B: Residual sensitivity; posterior phase contrast (95\\% interval)\n'+b,encoding='utf8')
+
+
+RESIDUAL_CONDITIONS=(('Gaussian independent','Gaussian',None,0.0),
+    ('Student independent, df4','Student',4,0.0),
+    ('Student independent, df8','Student',8,0.0),
+    ('Gaussian AR1, rho0.2','Gaussian',None,0.2),
+    ('Gaussian AR1, rho0.4','Gaussian',None,0.4),
+    ('Student innovations df4, AR1 rho0.2','Student',4,0.2))
+RESIDUAL_MONITORS=('K','delta16','delta48','phase_contrast','PIP32','PIP12','sigma2',
+    'mean_effective_precision','mean_log_latent_weight','latent_weight_lower_tail_fraction')
+
+
+def residual_diagnostics(summary):
+    """Recheck every nonconstant monitor; undefined constant diagnostics are not passes."""
+    diagnostics=summary.get('diagnostics',{})
+    if set(diagnostics)!=set(RESIDUAL_MONITORS):raise ValueError('Missing or unexpected residual diagnostic monitors')
+    constants=[]
+    for name,d in diagnostics.items():
+        if d.get('constant_chain') is True:
+            if any(d.get(k) is not None for k in ('rhat','ess_bulk','ess_tail')):raise ValueError('Constant residual monitor has defined Rhat/ESS')
+            constants.append(name);continue
+        values=[d.get(k) for k in ('rhat','ess_bulk','ess_tail')]
+        if any(v is None or not np.isfinite(v) for v in values) or not 0<values[0]<=1.01 or min(values[1:])<1500:
+            raise ValueError('Unaccepted residual diagnostics: '+name)
+    q=diagnostics['phase_contrast'].get('quantile_mcse',[])
+    if len(q)!=2 or any(v is None or not np.isfinite(v) or not 0<=v<=.002 for v in q):raise ValueError('Unaccepted phase-contrast quantile MCSE')
+    if summary.get('needs_escalation') is not False:raise ValueError('Residual summary still requires escalation')
+    return sorted(constants)
+
+
+def residual_table_tex(rows):
+    index={(r['model'],r['group']):r for r in rows}
+    text=[r'\begin{tabular}{lrr}',r'\hline',r'Residual model & High-first & Low-first \\']
+    for label,_,_,_ in RESIDUAL_CONDITIONS:
+        cells=[]
+        for group in ('High','Low'):
+            r=index[label,group];cells.append(f"{r['mean']:.4f} [{r['q025']:.4f}, {r['q975']:.4f}]")
+        text.append(' & '.join([label]+cells)+r' \\')
+    return '\n'.join(text+[r'\hline',r'\end{tabular}'])+'\n'
+
+
+def residual_panel(results, protocol=None):
+    """Read public runner outputs only. Return (12 rows, provenance).
+
+    results accepts one root containing exact/student/diagnostic_extension
+    (also corrected_final_exact/formal_student), or a sequence of explicit
+    runner output directories. The largest recorded
+    budget is selected BEFORE testing diagnostics; an earlier passing run is
+    never substituted, and overlapping runs are never pooled.
+    """
+    roots=[Path(results)] if isinstance(results,(str,Path)) else list(map(Path,results))
+    dirs=[]
+    for root in roots:
+        children=[root/name for name in ('exact','student','diagnostic_extension','corrected_final_exact','formal_student') if (root/name).is_dir()]
+        dirs.extend(children or [root])
+    dirs=list(dict.fromkeys(p.resolve() for p in dirs));sources={}
+    def load(path):
+        sources[str(path.resolve())]=sha(path);return read(path)
+    def unique(name):
+        matches=[d/name for d in dirs if (d/name).is_file()]
+        if len(matches)!=1:raise ValueError('Need exactly one residual input '+name)
+        return matches[0]
+    current=Path(protocol) if protocol else ROOT/'scripts/config/residual_sensitivity_protocol.json'
+    current_protocol=load(current)
+    provenance=dict(selection='largest available iteration budget, checked before acceptance; final run alone, no pooling',
+        current_protocol=dict(path=str(current.resolve()),sha256=sha(current)),
+        historical_runs=[],selected=[],source_sha256=sources)
+    recorded_manifests=set()
+    for group in ('High','Low'):
+        for mode in ('exact','student'):
+            manifests=[(d/f'run_manifest_{mode}_{scope}.json',scope) for d in dirs for scope in (group,'both') if (d/f'run_manifest_{mode}_{scope}.json').is_file()]
+            if not manifests:raise ValueError(f'Missing residual run manifest: {mode} {group}')
+            for path,scope in manifests:
+                manifest=load(path)
+                if manifest.get('mode')!=mode or manifest.get('group')!=scope:raise ValueError('Residual run manifest identity differs')
+                if path in recorded_manifests:continue
+                recorded_manifests.add(path)
+                provenance['historical_runs'].append(dict(path=str(path),group=scope,applies_to_groups=['High','Low'] if scope=='both' else [scope],design_protocol_sha256=manifest.get('design_protocol_sha256'),source_sha256=manifest.get('source_sha256'),
+                    note='Frozen historical identity retained; current protocol and documented extension do not override it'))
+    frozen=list(dict.fromkeys(p.resolve() for root in roots for p in (root/'DESIGN_PROTOCOL.json',root.parent/'DESIGN_PROTOCOL.json') if p.is_file()))
+    provenance['available_frozen_protocols']=[]
+    for path in frozen:
+        load(path)
+        provenance['available_frozen_protocols'].append(dict(path=str(path),sha256=sha(path),
+            matches_historical_run=any(r['design_protocol_sha256']==sha(path) for r in provenance['historical_runs'])))
+    rows=[]
+    for label,family,df,rho in RESIDUAL_CONDITIONS:
+        for group in ('High','Low'):
+            constants=[]
+            if family=='Gaussian':
+                path=unique(f'{group.lower()}_ar{rho:.1f}_summary.json');summary=load(path)
+                values=[summary[k][2] for k in ('mean','q025','q975')]
+                if summary.get('enumerated_partitions')!=27931:raise ValueError('Incomplete exact Gaussian enumeration')
+                budget=None
+            else:
+                stem=f'{group.lower()}_t{df}_rho{rho:.1f}'
+                paths=[p for d in dirs for p in d.glob(stem+'*_summary.json')]
+                if not paths:raise ValueError('Missing residual summaries: '+stem)
+                candidates=[(load(p),p) for p in paths]
+                budgets=[s.get('iterations') for s,p in candidates]
+                if any(isinstance(b,bool) or not isinstance(b,int) for b in budgets) or len(set(budgets))!=len(budgets):raise ValueError('Ambiguous residual iteration budgets: '+stem)
+                summary,path=max(candidates,key=lambda pair:pair[0]['iterations']);budget=summary['iterations']
+                if summary.get('df')!=df or summary.get('rho')!=rho:raise ValueError('Residual model identity differs: '+stem)
+                if summary.get('warmup')!=2000 or summary.get('retained_per_chain')!=budget-2000 or budget not in (15000,30000,60000):raise ValueError('Unexpected residual sampling budget')
+                if budget==60000:
+                    extension=current_protocol.get('Student_computation',{}).get('documented_diagnostic_extension',{})
+                    if (group,df,rho)!=('High',4,0.0) or extension.get('iterations_per_chain')!=60000 or extension.get('same_model_data_seeds') is not True:raise ValueError('Undocumented residual diagnostic extension')
+                constants=residual_diagnostics(summary)
+                values=[summary['phase_contrast'][k] for k in ('mean','q025','q975')]
+            if any(not isinstance(v,(int,float)) or isinstance(v,bool) for v in values) or not np.isfinite(values).all() or values[1]>values[2]:raise ValueError('Invalid residual contrast summary')
+            rows.append(dict(model=label,group=group,mean=values[0],q025=values[1],q975=values[2]))
+            provenance['selected'].append(dict(model=label,group=group,path=str(path),sha256=sha(path),iterations=budget,constant_monitors=constants))
+    provenance['current_protocol']['documented_diagnostic_extension']=current_protocol.get('Student_computation',{}).get('documented_diagnostic_extension')
+    return rows,provenance
 
 
 def timing_summary(rows,repeats=31):
@@ -167,7 +287,7 @@ def read_public_small_csv(path):
 
 def generate(args):
     out=args.output_root.resolve();sources={};rows=[];originals={};small=[];cov=[]
-    roots=[*args.simulation,args.benchmark,args.small_sample,args.application.parent]
+    roots=[*args.simulation,args.benchmark,args.small_sample,args.application.parent,*(getattr(args,'residual_results',None) or [])]
     if any(out==p.resolve() or out.is_relative_to(p.resolve()) for p in roots):raise ValueError('Output must be outside immutable input roots')
     def load(p):sources[str(p.resolve())]=sha(p);return read(p)
     found=set()
@@ -239,6 +359,10 @@ def generate(args):
                 if g.get('PELT_BIC'):row['cuts']=g['PELT_BIC'].get('cuts',m.get('cuts'))
             elif m['method']=='CG-RJMCMC':row['runtime_definition']='archived original single three-chain execution'
             application.append(row)
+    residual=None;residual_provenance=None
+    if getattr(args,'residual_results',None):
+        residual,residual_provenance=residual_panel(args.residual_results,getattr(args,'residual_protocol',None))
+        sources.update(residual_provenance['source_sha256'])
     fingerprint=hashlib.sha256(json.dumps(sources,sort_keys=True).encode()+Path(__file__).read_bytes()).hexdigest();manifest=out/'table_manifest.json'
     if manifest.exists() and read(manifest)['fingerprint']!=fingerprint:raise ValueError('Output identity differs; use a new output directory')
     agg=aggregate_methods(rows);sagg=aggregate_methods(small)
@@ -252,7 +376,10 @@ def generate(args):
         g=[r for r in cov if r['cell']==c];diagnostics=[d for r in g for d in r.get('diagnostics',[])]
         coverage.append(dict(cell=c,replications=len(g),coverage=float(np.mean([r['coverage'] for r in g])),coverage_mcse=mcse([r['coverage'] for r in g]),mean_width=describe([r.get('interval_width',r.get('mean_interval_width',r.get('mean_width'))) for r in g])['mean'],maximum_rhat=max((d.get('split_Rhat',d.get('Rhat',d.get('rhat',0))) or 0 for d in diagnostics),default=None),minimum_bulk_ess=min((d.get('bulk_ESS',d.get('ess_bulk',float('inf'))) or float('inf') for d in diagnostics),default=None),diagnostic_pass_count=sum(r.get('diagnostic_pass') is True for r in g)))
     emit(out,'table3_small_coverage_diagnostics',coverage);emit(out,'table5_application',application)
-    manuscript_tables(out,agg,sagg,coverage,application)
+    if residual is not None:
+        emit(out,'table5_panel_b',residual)
+        save(out/'table5_residual_provenance.json',residual_provenance)
+    manuscript_tables(out,agg,sagg,coverage,application,residual)
     for p,h in sources.items():
         if sha(p)!=h:raise RuntimeError('Table input changed during aggregation')
     save(manifest,dict(fingerprint=fingerprint,source_sha256=sources,script_sha256=sha(__file__),scope='partial_development' if args.allow_partial else 'formal',new_MCMC_runs=0,outputs={p.name:sha(p) for p in out.glob('*') if p.is_file() and p!=manifest}))
@@ -268,5 +395,7 @@ def main():
     p.add_argument('--timing',action='store_true',help='Execute 31 corrected PELT timings per application group')
     p.add_argument('--application-input',type=Path)
     p.add_argument('--allow-partial',action='store_true')
+    p.add_argument('--residual-results',type=Path,action='append',help='Optional public residual output root, or repeat for exact and Student directories')
+    p.add_argument('--residual-protocol',type=Path,help='Current public protocol, including documented diagnostic extensions')
     generate(p.parse_args())
 if __name__=='__main__':main()

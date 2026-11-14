@@ -53,7 +53,7 @@ The default `all` command runs the original primary/sensitivity/application/chec
 python scripts/reproduce.py all --include-revision --workers 8 --application-input data/external/RawData_Experiment1 --output-root results/reproduction_final --assets manuscript/reproduced_final
 ```
 
-This additionally runs N35, the full solver audit, all500 D5 CDF inversion and final table panels. It can take substantial time. It is not an ordinary CI job. Use `--dry-run` to inspect actual commands. `all` starts new campaigns; do not use it merely to postprocess historical caches.
+This additionally runs N35, the full solver audit, all500 D5 CDF inversion and the original revision table panels. The three targeted diagnostics below are separate explicit commands; this workflow does not launch them automatically. It can take substantial time. It is not an ordinary CI job. Use `--dry-run` to inspect actual commands. `all` starts new campaigns; do not use it merely to postprocess historical caches.
 
 ## N=35 simulations
 
@@ -92,6 +92,40 @@ All500 mode consumes original saved draw quantiles and matching statistics; it d
 
 To audit an existing exact cache, use `--reaggregate-cache --cached-exact-root ARCHIVE --output NEW_DIR`. That verifies saved input/output hashes, original endpoints, full support and saved certificates and recomputes aggregate statistics. It explicitly records `root_evaluations_performed=false`: it is not a fresh posterior inversion. Historical results must not be relabelled as a new run.
 
+## D5 coverage diagnostic
+
+```bash
+python scripts/coverage_diagnostic.py --pilot --replications 1,3 --workers 2 --simulation-results results/reproduction/simulation --statistics-root results/reproduction/revision/benchmark/statistics/D5 --records-root results/reproduction/revision/benchmark/replicates/D5 --baseline-exact-root results/reproduction/revision/exact_d5 --output results/reproduction/revision/coverage_pilot
+python scripts/coverage_diagnostic.py --full500 --workers 12 --simulation-results results/reproduction/simulation --statistics-root results/reproduction/revision/benchmark/statistics/D5 --records-root results/reproduction/revision/benchmark/replicates/D5 --baseline-exact-root results/reproduction/revision/exact_d5 --output results/reproduction/revision/coverage_diagnostic
+```
+
+This paired diagnostic uses the same 500 original D5 datasets. It crosses phase-effect prior standard deviations `sigma/4`, `sigma/2` (original), and `sigma` with unknown partitions and conditioning on the known true cuts. The latter is an oracle diagnostic using simulation truth. All other priors, the likelihood, outcomes and training masks remain fixed; no new outcomes or MCMC draws are generated. Changing the phase prior recalculates every partition weight, including its dimension-dependent normalizing constant.
+
+Unknown-partition intervals use the full 27,931-component posterior mixture. New endpoints are proposed numerically and accepted only after full-support CDF residual and strict crossing checks, with a full-CDF Brent fallback. Original-prior unknown-partition endpoints reuse the supplied certified exact archive, with its provenance and saved certificates checked and partition weights recalculated independently. Outputs retain all six conditions, five true phases, the original near/far sets, high/low effect levels, posterior structure, and dataset-level paired Monte Carlo standard errors. Original-prior endpoints and weights are checked against the supplied exact baseline for every dataset. Pilot outputs are separate from the fixed full500 campaign, and provenance-bound resume rejects changed inputs or source. The diagnostic does not select a new default prior or establish universal frequentist calibration.
+
+## D5 sample-size and individual-timing calibration
+
+```bash
+python scripts/calibration_sensitivity.py --pilot --replications 1 --workers 1 --simulation-results results/reproduction/simulation --statistics-root results/reproduction/revision/benchmark/statistics/D5 --records-root results/reproduction/revision/benchmark/replicates/D5 --baseline-diagnostic-root results/reproduction/revision/coverage_diagnostic --output results/reproduction/revision/calibration_pilot
+python scripts/calibration_sensitivity.py --full500 --workers 8 --simulation-results results/reproduction/simulation --statistics-root results/reproduction/revision/benchmark/statistics/D5 --records-root results/reproduction/revision/benchmark/replicates/D5 --baseline-diagnostic-root results/reproduction/revision/coverage_diagnostic --output results/reproduction/revision/calibration_sensitivity
+```
+
+Run the prior/oracle diagnostic first. The frozen calibration protocol adds500 paired replications for shared-boundary N1000/N2000 and N500 with balanced individual boundary offsets of -2,-1,0,1,2 bins. The original500 outcomes and masks are preserved and hash-checked; an independent1500-person extension supplies nested additional participants for the larger samples. Jitter changes only the phase signal. Its truth is the participant-average curve, with gradual population transitions; correct-count/Hausdorff accuracy is not scored against the four nominal transition centers. The oracle uses known participant-specific phase assignments and the full covariance of their five common phase levels. It is a truth-guided diagnostic, not a fitted individual-boundary competitor.
+
+All27,931 partition weights are computed. Active CDF sums are unrenormalized; a conservative omitted-mass bound at most1e-15 and numerical padding certify each endpoint within1e-8 log-RT units. Coarse sums only propose brackets. Failed certificates require full-CDF fallback. Replications1/250/500 additionally evaluate all endpoint checks with complete CDF sums. Coverage classifications near numerical thresholds also require full sums or block completion. Outputs include coverage, width, bias and RMSE by overall/near/far and boundary-distance strata, dataset-level Monte Carlo standard errors, paired contrasts, nested-data checks and immutable resume identities. Shared-timing violation cannot explain the original shared-truth D5 gap; the three interventions assess separate sensitivities rather than an additive causal decomposition.
+
+## Application residual sensitivity
+
+```bash
+python scripts/residual_sensitivity.py --mode exact --group both --input data/external/RawData_Experiment1 --output results/reproduction/residual_sensitivity/exact
+python scripts/residual_sensitivity.py --mode student --group both --engine uniform --input data/external/RawData_Experiment1 --output results/reproduction/residual_sensitivity/student
+python scripts/residual_sensitivity.py --mode student --group High --engine uniform --student-condition t4-iid --iterations 60000 --input data/external/RawData_Experiment1 --output results/reproduction/residual_sensitivity/diagnostic_extension
+```
+
+The same application data and training masks are fitted under Gaussian independent errors, independent unit-variance Student-t errors with4 or8 degrees of freedom, Gaussian autoregressive working correlations0.2/0.4, and Student-t innovations with4 degrees of freedom and working correlation0.2. Correlation uses native trial gaps within each participant/block. The combined case specifies independent Student innovations after whitening; original residual marginals are generally not Student distributions. Gaussian cases enumerate all27,931 partitions; Student cases use valid partially collapsed Gibbs sampling with separate structural and latent-weight random streams. The `uniform` engine uses portable Python; optional native compilation may be blocked by host policy.
+
+The fixed protocol is `scripts/config/residual_sensitivity_protocol.json`. Three chains initially use15,000 iterations with2,000 warm-up; diagnostic criteria trigger30,000 iterations. In the executed study, high-first Student4 independent errors required a documented60,000-iteration diagnostic extension because the bin12 inclusion-indicator ESS remained below1,500 at30,000. The final command runs only the high-first independent Student4 extension. Keep its output alongside the normal command's accepted results for the other cases, and do not pool overlapping same-seed runs. The original protocol and execution hashes remain recorded separately from the later extension documentation. These are fixed-grid empirical sensitivity checks, not repeated-sample coverage studies or a selection of the model with the preferred result.
+
 ## Final figures and Tables 2/3/5
 
 ```bash
@@ -102,13 +136,21 @@ python scripts/reproduce.py figures --include-revision --application-input data/
 
 `revision` runs N35, solver validation, all500 exact intervals and final tables, using existing primary/application results. Individual stages are `small-sample`, `benchmark`, `exact-d5` and `tables`. To process historical data without new MCMC, supply `--small-sample-cache`, `--design-input`, `--benchmark-cache`, `--exact-cache` and `--runtime-repeats` as appropriate. `--simulation-results` and `--application-results` select read-only existing roots. Results and caches are not bundled with the public source; full fresh commands above create the necessary inputs.
 
-The six figures and original table layouts are under the asset root. **Final revised Tables 2/3/5 are under `revision_tables/`**, with CSV/Markdown panels and compact TeX. Table2 includes Panels A/B/C; Table3 includes primary structure, N35 structure, coverage/MCSE/width and diagnostics. The table generator reads analysis outputs, never constants transcribed from the manuscript.
+The six figures and original table layouts are under the asset root. **Final revised Tables 2/3/5 are under `revision_tables/`**, with CSV/Markdown panels and compact TeX. Table2 includes Panels A/B/C; Table3 includes primary structure, N35 structure, coverage/MCSE/width and diagnostics. The table generator reads analysis outputs, never constants transcribed from the manuscript. Table5 Panel B additionally requires the completed residual-sensitivity outputs.
 
 ```bash
 python scripts/revision_tables.py --simulation results/reproduction/simulation --application results/reproduction/application/results.json --benchmark results/reproduction/revision/benchmark --small-sample results/reproduction/revision/small_sample --timing --application-input data/external/RawData_Experiment1 --output-root manuscript/reproduced/revision_tables
 ```
 
 `--timing` performs one untimed warmup and31 single-thread corrected PELT repetitions per group. Table5 preserves the original CG three-chain execution times and records the different protocols. To retain an actual earlier timing run, replace `--timing --application-input ...` with `--runtime-repeats PATH_TO_REPEATS_CSV`. Timings depend on hardware/load and are not expected to reproduce published digits on another machine. `figures.py --revision-results REVISION_ROOT` also calls the final table generator; supply saved repeat timings or the raw application path.
+
+To add Table5 Panel B after completing the residual commands above, supply their parent directory:
+
+```bash
+python scripts/reproduce.py tables --application-input data/external/RawData_Experiment1 --residual-results results/reproduction/residual_sensitivity
+```
+
+The direct `revision_tables.py` command also accepts `--residual-results ROOT` (repeatable for separate roots). Expected subdirectories are `exact/`, `student/`, and optionally `diagnostic_extension/`. The parser requires all12 model/group cells and accepted diagnostics. It selects the largest available Student budget for each cell before checking acceptance, without pooling runs or falling back to an earlier passing result. The documented60,000 extension applies only to high-first independent Student4. Outputs include `table5_panel_b.csv/.md/.tex`, a provenance JSON, preserved Panel A, and combined `table5.tex`. Omit the flag to generate the original Panel A alone; no sensitivity fits are launched by table generation.
 
 ## Result-to-code map
 
@@ -119,8 +161,11 @@ python scripts/revision_tables.py --simulation results/reproduction/simulation -
 | PELT repair, common-cap DP | constrained_dp_validation.py | objectives, solver_audit, paired summaries |
 | Fixed precision/longer chains | precision.py | case summaries and trajectory/discrete diagnostics |
 | D5 all500 exact-mixture | exact_d5_500.py | exact endpoints, coverage, endpoint discrepancies |
+| D5 phase-prior / oracle coverage | coverage_diagnostic.py | six-cell strata, paired contrasts, certificates |
+| D5 sample-size / timing interventions | calibration_sensitivity.py | six new fit cells, distance-stratified coverage, paired contrasts |
 | Application predictions | application.py | results.json, heldout_rmse.csv |
 | PPC/specification/bootstrap | checks.py | predictive and contrast summaries |
+| Application error/dependence sensitivity | residual_sensitivity.py | exact Gaussian and sampled Student contrasts, intervals, structure, diagnostics |
 | Tables2/3/5 and31-repeat timing | revision_tables.py | revision_tables/*.csv/md/tex, manifest |
 | Six figures | figures.py, simulation_figures.py | PDFs, separate TIFFs, source data |
 

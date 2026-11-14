@@ -1,8 +1,8 @@
 # GitHub reproducibility repair
 
-Date: 12 November 2026. Baseline commit: 57b7a48d22aadb6fd355b7e25f23e075a9b1f90a.
+Historical repair: 12 November 2026. Baseline commit: 57b7a48d22aadb6fd355b7e25f23e075a9b1f90a.
 
-## Outcome
+## Historical outcome (12 November)
 
 The local public-source candidate implements the revision calculations and passes the complete cached-input revision workflow. Native clean-environment acceptance remains subject to the host's Windows App Control block; this is not an unconditional reproducibility-ready declaration. No commit, push, release or remote CI dispatch was performed. The remote repository has not been changed.
 
@@ -37,3 +37,11 @@ Four real reviewer roles examined statistics, numerical algorithms, reproducibil
 Formal kernel.c is byte-identical, SHA256 d36e15cb174012078649b489a361a71278b0fbec14cb717dc244bd9ab94a6171. The model, priors, DGP values, original formal seeds and budgets are retained. Historical caches and PLOS submission files were not overwritten; no manuscript result was changed.
 
 The public full recomputation path is implemented, but no new3000+1600+1000 formal sampler campaign or fresh all500 posterior inversion was undertaken in this repair. Local results use explicit immutable cache inputs; fresh generation uses public code and OSF input instructions. Remote Linux CI was not executed. See TEST_RESULTS.md for actual command statuses and PUBLIC_RELEASE_CHECKLIST.md for the outstanding native execution gate.
+
+## 14 November source update
+
+The current source update adds the completed phase-prior/oracle, sample-size/individual-timing, and application residual-sensitivity studies. Their direct commands, inputs and output roots are documented in README.md. The original `revision` workflow remains the N35/solver/exact/table workflow; the three targeted studies are explicit additional commands, not silently included expensive jobs.
+
+The table generator additionally reads the six residual specifications in both groups for Table 5 Panel B, selecting diagnostic-qualified final Student runs without combining overlapping same-seed prefixes. Source-only regression fixtures exercise parsing and failure handling. The source lock retains actual historical execution identities separately from current maintenance changes.
+
+This update publishes source, protocols, tests and documentation to the existing repository under the author's authorization. Manuscripts, submission letters/checklist, participant records, local outputs, private audits and compiled binaries are excluded. The 12 November execution statements above remain dated historical records; current targeted execution and test results are recorded in TEST_RESULTS.md. Remote CI status must be checked for the actual published commit.

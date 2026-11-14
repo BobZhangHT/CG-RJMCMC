@@ -56,3 +56,23 @@ The first isolated test invocation had an unquoted absolute JUnit path containin
 Machine evidence is retained locally under tmp/github_reproducibility_repair_20261112: pytest_final_current.xml/log/status; final_clean_acceptance.json; final_composed_acceptance.json; final_table_comparison.json; new_timing_check_complete/timing_acceptance.json; static_acceptance.json; review_A/B/C/D reports and worker run records. Source hashes in each result identify its actual execution; LF normalization was separately verified to preserve Python ASTs, and current table generation/timing used the final code.
 
 Release status: implemented and cache-validated; native clean-environment acceptance remains blocked by host policy. Run the unchanged real native gates in a policy-permitted environment before declaring unconditional reproducibility readiness. Remote Linux execution and a fresh full numerical campaign remain distinct, explicitly unexecuted checks.
+
+
+## 14 November 2026: targeted reviewer diagnostics
+
+- 56 targeted tests passed: 13 prior/oracle diagnostic tests, 18 residual-sensitivity tests, 14 calibration-intervention tests, and 11 exact-D5 tests. The original historical results below/above retain their stated scope; this is not a fresh all-repository native test-suite claim.
+- Phase-prior/oracle diagnostic: all500 original D5 datasets and six conditions completed; independent aggregate, input-hash, oracle and full-CDF checks passed.
+- Sample-size/timing diagnostic: all500 paired replications and all3,000 new posterior fits completed, without exclusions. Thirty-five cases were resumed unchanged after transient memory-allocation errors, reducing concurrency from8 to4. Numerical source, protocol and input identities were retained. Independent aggregate differences were at most1.12e-16;3,072 independently reconstructed endpoint checks passed.
+- Application residual sensitivity: six working residual specifications in both groups completed. Gaussian cases used full enumeration; Student cases used portable Python Metropolis-within-partially-collapsed Gibbs. The high-first independent Student4 fit required a disclosed60,000-iteration diagnostic extension; final nonconstant ESS and R-hat criteria passed. This empirical sensitivity study does not establish repeated-sample coverage under these residual alternatives.
+- The optional newly compiled residual C bridge was not used: Windows App Control blocked new binaries. No host-policy bypass was attempted.
+- A broad Ruff style check was not clean. The executed numerical sources remain frozen; the recorded findings mainly concern dictionary/import style and immediately evaluated loop closures. These style findings are separate from the passing numerical tests and statistical gates.
+
+No commit, push or online submission was performed in this diagnostic pass. The public source lock records the actual current source and preserves historical execution identities.
+
+## 14 November 2026: public source integration
+
+The integrated diagnostic/table/orchestration selection passed 95 tests before the final CLI and combined-manifest regressions were added. The final CLI/orchestration suite passed 36 tests, including the Student condition selector, source-only imports and residual-result forwarding. The final table suite passed 23 tests; a separate strongest-model source gate reproduced and then confirmed repair of the combined-group manifest compatibility issue (3 focused checks passed). All twelve Table 5 Panel B means and all 24 interval endpoints match the current manuscript to four decimal places. No manuscript constants are embedded in the generator.
+
+An independent source-only export contains 56 eligible source/documentation files. The four new diagnostic/table entry points all execute `--help` successfully from that directory. The exporter excludes participant records, local outputs, manuscript/submission files, private audits and binaries. The added CLI selector restricts the documented 60,000-iteration extension to its authorized Student4 independent high-first condition; it does not change the sampler algorithm or the default model grid. Historical executed source hashes remain distinct from current maintenance hashes.
+
+Current source-lock validation and `git diff --check` pass. This release does not claim a new complete native-suite run, remote CI success, or a repeat of the original formal simulation campaign. Publication is authorized for source and public documentation only; consult the published commit's Actions run for remote execution status.
